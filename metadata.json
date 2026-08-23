@@ -1,0 +1,7 @@
+{
+  "name": "Math Master",
+  "description": "Speed and accuracy mental math training app with offline progress tracking, practice modes, flashcard study guides, and daily goal reminders.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
