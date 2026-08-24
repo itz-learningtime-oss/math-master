@@ -1,15 +1,25 @@
 // Shared config & helpers for Cloudflare Pages Functions (push notifications)
 import webpush from "web-push";
 
-export const VAPID_PUBLIC_KEY =
-  process.env.VAPID_PUBLIC_KEY ||
+const DEFAULT_PUBLIC =
   "BI7Bmi6uZ8eJnKY-YFCtF5FJGs2zPA_D8zYwg6CR2SFJ6qLgmqdnDINTIx-lL_N5J1jJZNdVAnKmjbAXQPxcobc";
-export const VAPID_PRIVATE_KEY =
-  process.env.VAPID_PRIVATE_KEY || "bBGim8F-uKOA4bPgEH2wLoGcIC58saAZVIIfy5tbcw4";
-export const VAPID_SUBJECT =
-  process.env.VAPID_SUBJECT || "mailto:www.itzlearningtime@gmail.com";
+const DEFAULT_PRIVATE = "bBGim8F-uKOA4bPgEH2wLoGcIC58saAZVIIfy5tbcw4";
+const DEFAULT_SUBJECT = "mailto:www.itzlearningtime@gmail.com";
 
-webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+// Resolve VAPID keys from context.env (dashboard) first, then hardcoded defaults.
+export function getVapid(env) {
+  return {
+    publicKey: (env && env.VAPID_PUBLIC_KEY) || DEFAULT_PUBLIC,
+    privateKey: (env && env.VAPID_PRIVATE_KEY) || DEFAULT_PRIVATE,
+    subject: (env && env.VAPID_SUBJECT) || DEFAULT_SUBJECT,
+  };
+}
+
+export function initWebPush(env) {
+  const v = getVapid(env);
+  webpush.setVapidDetails(v.subject, v.publicKey, v.privateKey);
+  return v;
+}
 
 // KV keys
 export function subKey(endpoint) {
@@ -63,6 +73,7 @@ export async function listSubscriptions(env) {
 }
 
 export async function sendPush(env, subscription, title, body) {
+  initWebPush(env);
   const payload = JSON.stringify({ title, body });
   try {
     await webpush.sendNotification(subscription, payload, { TTL: 300 });
@@ -70,9 +81,9 @@ export async function sendPush(env, subscription, title, body) {
   } catch (err) {
     const statusCode = err && err.statusCode;
     // 404/410 means the subscription is no longer valid -> remove it
-    if (statusCode === 404 || statusCode === 410) {
+    if ((statusCode === 404 || statusCode === 410) && getKV(env)) {
       try {
-        await env.MATH_MASTER_KV.delete(subKey(subscription.endpoint));
+        await getKV(env).delete(subKey(subscription.endpoint));
       } catch {
         // ignore
       }

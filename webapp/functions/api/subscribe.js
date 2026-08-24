@@ -1,5 +1,5 @@
 // POST /api/subscribe  { subscription, hour, minute, enabled }
-import { saveSubscription, VAPID_PUBLIC_KEY, getKV, kvMissingResponse } from "../_shared.js";
+import { saveSubscription, getKV, kvMissingResponse, getVapid } from "../_shared.js";
 
 export async function onRequestPost(context) {
   const { request, env } = context;
@@ -16,7 +16,7 @@ export async function onRequestPost(context) {
     await saveSubscription(env, subscription, hour ?? 19, minute ?? 0, enabled !== false);
 
     return new Response(
-      JSON.stringify({ ok: true, publicKey: VAPID_PUBLIC_KEY }),
+      JSON.stringify({ ok: true, publicKey: getVapid(env).publicKey }),
       { status: 200, headers: { "Content-Type": "application/json" } }
     );
   } catch (e) {
