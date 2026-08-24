@@ -1,0 +1,21 @@
+name = "math-master-reminder"
+main = "src/index.js"
+compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Cron: run every 15 minutes to catch each user's scheduled reminder time
+[triggers]
+crons = ["*/15 * * * *"]
+
+# Bind to the SAME KV namespace used by the Pages Functions.
+# Create the KV namespace in the dashboard and replace the id below.
+[[kv_namespaces]]
+binding = "MATH_MASTER_KV"
+id = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"
+
+# VAPID keys (paste the real private key here or set in dashboard secrets)
+[vars]
+VAPID_SUBJECT = "mailto:www.itzlearningtime@gmail.com"
+
+# VAPID_PRIVATE_KEY should be set as a secret: `wrangler secret put VAPID_PRIVATE_KEY`
+# VAPID_PUBLIC_KEY as a var or secret.

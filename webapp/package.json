@@ -1,0 +1,33 @@
+{
+  "name": "math-master-web",
+  "version": "3.14.0",
+  "description": "Math Master - Speed Math & Mental Arithmetic Trainer (Web Version)",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview"
+  },
+  "keywords": [
+    "math",
+    "mental-math",
+    "speed-training",
+    "practice"
+  ],
+  "author": "Vishesh Chaturvedi",
+  "license": "ISC",
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.5",
+    "@vitejs/plugin-react": "^4.7.0",
+    "sharp": "^0.33.5",
+    "typescript": "^5.9.3",
+    "vite": "^6.4.3",
+    "web-push": "^3.6.7"
+  },
+  "dependencies": {
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  }
+}
