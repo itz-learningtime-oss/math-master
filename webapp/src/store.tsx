@@ -37,6 +37,8 @@ export interface AppState {
   showNamePromptDialog: boolean;
 }
 
+const initialGoal = storage.loadGoal() ?? defaultUserGoal();
+
 const initialState: AppState = {
   destination: { type: "home" },
   previousDestination: { type: "home" },
@@ -52,8 +54,9 @@ const initialState: AppState = {
   grid: { rows: [], cols: [], currentStep: 0, userAnswers: {}, stepStartTime: 0, isError: false, activePrompt: "", expectedAnswer: 0 },
   study: defaultStudyState(),
   sessions: storage.loadSessions(),
-  goal: storage.loadGoal() ?? defaultUserGoal(),
-  showNamePromptDialog: false,
+  goal: initialGoal,
+  // On first launch (no saved name), auto-show the "What is your name?" dialog.
+  showNamePromptDialog: initialGoal.userName.trim() === "",
 };
 
 // ---- Actions ----
