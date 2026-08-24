@@ -16,7 +16,24 @@ export function subKey(endpoint) {
   return `sub:${endpoint}`;
 }
 
+// Returns the KV binding or null if it isn't configured (dashboard binding missing).
+export function getKV(env) {
+  return env && env.MATH_MASTER_KV ? env.MATH_MASTER_KV : null;
+}
+
+export function kvMissingResponse() {
+  return new Response(
+    JSON.stringify({
+      ok: false,
+      error: "KV namespace binding 'MATH_MASTER_KV' is not configured. Add it in the Cloudflare Pages dashboard: Settings → Functions → KV namespace bindings.",
+    }),
+    { status: 500, headers: { "Content-Type": "application/json" } }
+  );
+}
+
 export async function saveSubscription(env, subscription, hour, minute, enabled) {
+  const kv = getKV(env);
+  if (!kv) throw new Error("KV binding not configured");
   const record = {
     subscription,
     hour,
@@ -24,14 +41,16 @@ export async function saveSubscription(env, subscription, hour, minute, enabled)
     enabled: enabled !== false,
     updatedAt: Date.now(),
   };
-  await env.MATH_MASTER_KV.put(subKey(subscription.endpoint), JSON.stringify(record));
+  await kv.put(subKey(subscription.endpoint), JSON.stringify(record));
 }
 
 export async function listSubscriptions(env) {
-  const keys = await env.MATH_MASTER_KV.list({ prefix: "sub:" });
+  const kv = getKV(env);
+  if (!kv) return [];
+  const keys = await kv.list({ prefix: "sub:" });
   const records = [];
   for (const key of keys.keys) {
-    const raw = await env.MATH_MASTER_KV.get(key.name);
+    const raw = await kv.get(key.name);
     if (raw) {
       try {
         records.push(JSON.parse(raw));

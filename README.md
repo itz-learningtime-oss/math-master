@@ -43,7 +43,7 @@ Click **Save and Deploy**. Every push to `main` now auto-deploys.
 
 ### 3. Enable push notifications (optional)
 
-The reminder backend needs a **KV namespace** and a **VAPID secret**, configured in the dashboard (no CLI):
+> The site deploys and works fine without this step. Push notifications need a **KV namespace** and a **VAPID secret**, configured purely in the dashboard (no CLI, no file edits — `webapp/wrangler.toml` intentionally contains **no** KV id so deployment never fails on it).
 
 **a. Create the KV namespace**
 - Dashboard → **Workers & Pages** → **KV** → **Create a namespace**, name it `MATH_MASTER_KV`.

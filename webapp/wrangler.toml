@@ -9,15 +9,14 @@ pages_build_output_dir = "./dist"
 compatibility_date = "2025-01-01"
 compatibility_flags = ["nodejs_compat"]
 
-# KV binding shared by Pages Functions and the reminder Worker.
-# Create the KV namespace in the Cloudflare dashboard, then replace the id.
-[[kv_namespaces]]
-binding = "MATH_MASTER_KV"
-id = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"
+# NOTE: The KV namespace binding (MATH_MASTER_KV) is NOT defined here on purpose.
+# It is configured in the Cloudflare dashboard instead (no CLI needed):
+#   Pages → math-master → Settings → Functions → KV namespace bindings
+#   Variable name: MATH_MASTER_KV → pick your namespace.
 
 # VAPID public key used by the client to subscribe.
 [vars]
 VAPID_PUBLIC_KEY = "BI7Bmi6uZ8eJnKY-YFCtF5FJGs2zPA_D8zYwg6CR2SFJ6qLgmqdnDINTIx-lL_N5J1jJZNdVAnKmjbAXQPxcobc"
 
-# VAPID_PRIVATE_KEY should be set as a secret in the dashboard or via:
-#   npx wrangler pages secret put VAPID_PRIVATE_KEY --project-name math-master
+# VAPID_PRIVATE_KEY must be set as a secret in the dashboard:
+#   Pages → math-master → Settings → Environment variables

@@ -57,13 +57,16 @@ Cloudflare Pages connects directly to the GitHub repo, so **no Wrangler CLI is n
 Click **Save and Deploy**. Every push to `main` auto-deploys.
 
 ### 3. Enable push notifications
-1. **Create KV namespace** `MATH_MASTER_KV` (Dashboard → Workers & Pages → KV).
+> The site works without this step. Notifications are configured via the Cloudflare dashboard — no CLI / file edits needed.
+> The `wrangler.toml` intentionally has no KV id so deployment never fails on that.
+
+1. **Create KV namespace** `MATH_MASTER_KV` (Dashboard → Workers & Pages → KV → Create).
 2. **Bind it** to the Pages project: *Settings → Functions → KV namespace bindings* → add `MATH_MASTER_KV`.
 3. **Compatibility flag**: *Settings → Functions* → add `nodejs_compat`.
 4. **Environment variables**:
    - `VAPID_PUBLIC_KEY` = `BI7Bmi6uZ8eJnKY-YFCtF5FJGs2zPA_D8zYwg6CR2SFJ6qLgmqdnDINTIx-lL_N5J1jJZNdVAnKmjbAXQPxcobc`
    - `VAPID_PRIVATE_KEY` = `bBGim8F-uKOA4bPgEH2wLoGcIC58saAZVIIfy5tbcw4`
-5. **Reminder cron Worker**: Dashboard → Create → Worker → paste `worker/src/index.js`, cron trigger `*/15 * * * *`, bind the same KV namespace + VAPID vars.
+5. **Reminder cron Worker**: Dashboard → Create → Worker → paste `worker/src/index.js`, cron `*/15 * * * *`, bind the same KV + VAPID vars.
 
 ---
 

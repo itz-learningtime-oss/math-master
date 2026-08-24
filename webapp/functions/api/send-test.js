@@ -1,9 +1,11 @@
 // POST /api/send-test  { subscription }
-import { sendPush } from "../_shared.js";
+import { sendPush, getKV, kvMissingResponse } from "../_shared.js";
 
 export async function onRequestPost(context) {
   const { request, env } = context;
   try {
+    if (!getKV(env)) return kvMissingResponse();
+
     const body = await request.json();
     const { subscription } = body;
     if (!subscription || !subscription.endpoint) {

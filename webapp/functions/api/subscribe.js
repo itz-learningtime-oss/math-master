@@ -1,9 +1,11 @@
 // POST /api/subscribe  { subscription, hour, minute, enabled }
-import { saveSubscription, VAPID_PUBLIC_KEY } from "../_shared.js";
+import { saveSubscription, VAPID_PUBLIC_KEY, getKV, kvMissingResponse } from "../_shared.js";
 
 export async function onRequestPost(context) {
   const { request, env } = context;
   try {
+    if (!getKV(env)) return kvMissingResponse();
+
     const body = await request.json();
     const { subscription, hour, minute, enabled } = body;
 
