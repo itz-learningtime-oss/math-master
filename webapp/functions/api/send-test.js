@@ -1,11 +1,11 @@
 // POST /api/send-test  { subscription }
-import { sendPush, getKV, kvMissingResponse } from "../_shared.js";
+// Sends an immediate push. Does NOT require the KV binding — it delivers
+// straight to the subscription provided by the client. (Subscribe still uses KV.)
+import { sendPush } from "../_shared.js";
 
 export async function onRequestPost(context) {
   const { request, env } = context;
   try {
-    if (!getKV(env)) return kvMissingResponse();
-
     const body = await request.json();
     const { subscription } = body;
     if (!subscription || !subscription.endpoint) {

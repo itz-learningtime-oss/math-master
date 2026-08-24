@@ -3,7 +3,7 @@ import { useApp } from "../store";
 import { PRACTICE_MODES } from "../types";
 import { daysSinceEpoch } from "../storage";
 import ShareAppDialog from "../components/ShareAppDialog";
-import { registerServiceWorker, requestPermission, initializePushNotification, sendTestPush, updatePushSchedule, isPushSupported } from "../workers/push";
+import { ensurePushSubscribed, sendTestPush, updatePushSchedule, isPushSupported } from "../workers/push";
 
 export default function DashboardScreen() {
   const { state, dispatch, navigate, saveDailyGoal } = useApp();
@@ -62,33 +62,43 @@ export default function DashboardScreen() {
   // ---- Notification handlers ----
   const handleSendTest = async () => {
     if (!isPushSupported()) {
-      setNotifStatus("Browser push not supported on this device");
+      setNotifStatus("Push notifications aren't supported in this browser. Use Chrome/Edge on desktop or the Android app.");
       return;
     }
-    const sub = await (await registerServiceWorker())?.pushManager?.getSubscription();
-    if (!sub) {
-      setNotifStatus("Enable notifications first using the switch");
-      return;
+    try {
+      // Automatically subscribe if needed (no need to toggle the switch first).
+      const subscribed = await ensurePushSubscribed(reminderHour, reminderMinute);
+      if (!subscribed) {
+        const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+        setNotifStatus(
+          isIOS
+            ? "On iPhone/iPad, add this site to your Home Screen (Share → Add to Home Screen) first, then try again."
+            : "Could not subscribe to notifications. Allow notification permission in your browser and try again."
+        );
+        return;
+      }
+      setIsEnabled(true);
+      const ok = await sendTestPush();
+      setNotifStatus(
+        ok
+          ? "Test notification sent! Check your notification shade. ✅"
+          : "Subscribed, but the server didn't confirm delivery. Make sure KV + VAPID vars are set in the Pages dashboard (Settings → Functions / Environment variables)."
+      );
+    } catch (e) {
+      setNotifStatus("Error: " + String(e));
     }
-    const ok = await sendTestPush();
-    setNotifStatus(ok ? "Test notification sent! ✅" : "Failed to send. Check the Worker backend.");
   };
 
   const handleToggleReminder = async (checked: boolean) => {
     setIsEnabled(checked);
     saveDailyGoal(targetQuestions, reminderHour, reminderMinute, checked);
     if (checked) {
-      if (Notification.permission !== "granted") {
-        const granted = await requestPermission();
-        if (granted) {
-          await initializePushNotification(reminderHour, reminderMinute, true);
-          setNotifStatus("Notifications enabled ✅");
-        } else {
-          setNotifStatus("Notification permission denied");
-          setIsEnabled(false);
-        }
+      const ok = await ensurePushSubscribed(reminderHour, reminderMinute);
+      if (ok) {
+        setNotifStatus("Notifications enabled ✅");
       } else {
-        await updatePushSchedule(reminderHour, reminderMinute, true);
+        setNotifStatus(Notification.permission === "denied" ? "Notification permission denied in your browser." : "Could not enable notifications in this browser.");
+        setIsEnabled(false);
       }
     } else {
       await updatePushSchedule(reminderHour, reminderMinute, false);

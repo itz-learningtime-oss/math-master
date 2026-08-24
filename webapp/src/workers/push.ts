@@ -16,6 +16,17 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> {
   return outputArray;
 }
 
+async function getReg(): Promise<ServiceWorkerRegistration | null> {
+  if (!("serviceWorker" in navigator)) return null;
+  if (cachedRegistration) return cachedRegistration;
+  try {
+    cachedRegistration = await navigator.serviceWorker.ready;
+    return cachedRegistration;
+  } catch {
+    return null;
+  }
+}
+
 export async function registerServiceWorker(): Promise<ServiceWorkerRegistration | null> {
   if (!("serviceWorker" in navigator)) return null;
   try {
@@ -38,7 +49,7 @@ export async function requestPermission(): Promise<boolean> {
 
 export async function subscribeToPush(): Promise<PushSubscription | null> {
   if (!isPushSupported()) return null;
-  const reg = cachedRegistration ?? (await registerServiceWorker());
+  const reg = await getReg();
   if (!reg) return null;
   try {
     let sub = await reg.pushManager.getSubscription();
@@ -48,6 +59,7 @@ export async function subscribeToPush(): Promise<PushSubscription | null> {
         applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
       });
     }
+    // Also save subscription reference for later use
     return sub;
   } catch {
     return null;
@@ -56,7 +68,7 @@ export async function subscribeToPush(): Promise<PushSubscription | null> {
 
 export async function getSubscription(): Promise<PushSubscription | null> {
   if (!isPushSupported()) return null;
-  const reg = cachedRegistration ?? (await registerServiceWorker());
+  const reg = await getReg();
   if (!reg) return null;
   try {
     return await reg.pushManager.getSubscription();
@@ -70,12 +82,7 @@ export async function saveSubscriptionToBackend(sub: PushSubscription, hour: num
     const resp = await fetch("/api/subscribe", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        subscription: sub,
-        hour,
-        minute,
-        enabled,
-      }),
+      body: JSON.stringify({ subscription: sub, hour, minute, enabled }),
     });
     return resp.ok;
   } catch {
@@ -98,28 +105,28 @@ export async function sendTestPush(): Promise<boolean> {
   }
 }
 
+export async function ensurePushSubscribed(hour: number, minute: number): Promise<boolean> {
+  if (!isPushSupported()) return false;
+  if (Notification.permission !== "granted") {
+    const ok = await requestPermission();
+    if (!ok) return false;
+  }
+  const sub = await subscribeToPush();
+  if (!sub) return false;
+  await saveSubscriptionToBackend(sub, hour, minute, true);
+  return true;
+}
+
 export async function unsubscribeFromPush(): Promise<boolean> {
   if (!isPushSupported()) return false;
-  const reg = cachedRegistration ?? (await registerServiceWorker());
+  const reg = await getReg();
   if (!reg) return false;
   try {
     const sub = await reg.pushManager.getSubscription();
-    if (sub) {
-      await sub.unsubscribe();
-    }
+    if (sub) await sub.unsubscribe();
     return true;
   } catch {
     return false;
-  }
-}
-
-export async function initializePushNotification(hour: number, minute: number, enabled: boolean): Promise<void> {
-  if (!isPushSupported()) return;
-  if (Notification.permission !== "granted") return;
-  await subscribeToPush();
-  const sub = await getSubscription();
-  if (sub) {
-    await saveSubscriptionToBackend(sub, hour, minute, enabled);
   }
 }
 
@@ -127,14 +134,10 @@ export async function updatePushSchedule(hour: number, minute: number, enabled: 
   if (!isPushSupported()) return;
   if (enabled && Notification.permission === "granted") {
     const sub = await getSubscription();
-    if (sub) {
-      await saveSubscriptionToBackend(sub, hour, minute, true);
-    }
+    if (sub) await saveSubscriptionToBackend(sub, hour, minute, true);
   } else {
     const sub = await getSubscription();
-    if (sub) {
-      await saveSubscriptionToBackend(sub, hour, minute, false);
-    }
+    if (sub) await saveSubscriptionToBackend(sub, hour, minute, false);
   }
 }
 
