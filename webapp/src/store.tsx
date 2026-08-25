@@ -232,7 +232,7 @@ function reducer(state: AppState, action: Action): AppState {
       };
     }
     case "UPDATE_INPUT":
-      return { ...state, currentInput: action.input, isAnswerError: false };
+      return { ...state, currentInput: action.input, isAnswerError: false, tablesWarningMessage: null };
     case "SET_ERROR":
       return { ...state, isAnswerError: action.value };
     case "TICK":

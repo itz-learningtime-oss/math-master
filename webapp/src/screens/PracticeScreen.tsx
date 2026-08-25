@@ -107,7 +107,7 @@ export default function PracticeScreen() {
                 ? "Type factor pair (e.g. 36×7)"
                 : isReverseTable
                   ? multiPair
-                    ? "e.g. 21*4, 12*7"
+                    ? "e.g. 21*4, 12*7 or 21*4"
                     : "Tap keypad (e.g. 12*2)"
                   : "Enter answer..."}
             </span>

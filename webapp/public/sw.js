@@ -7,7 +7,15 @@ self.addEventListener("install", (event) => {
 });
 
 self.addEventListener("activate", (event) => {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(
+    Promise.all([
+      self.clients.claim(),
+      // Clean up old cache versions
+      caches.keys().then((keys) =>
+        Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
+      ),
+    ])
+  );
 });
 
 // ---- Push notifications ----
@@ -47,8 +55,9 @@ self.addEventListener("notificationclick", (event) => {
 });
 
 // ---- Fetch caching for app shell ----
+// Navigation requests use NETWORK-FIRST so new deployments are picked up
+// immediately; static assets use cache-first for offline speed.
 const CACHE_NAME = "math-master-v3.14";
-const APP_SHELL = ["/", "/index.html", "/manifest.json"];
 
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
@@ -57,7 +66,25 @@ self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
   if (url.pathname.startsWith("/api/")) return;
   if (url.origin !== self.location.origin) return;
+  // Never cache the service worker or manifest — always fetch fresh
+  if (url.pathname.endsWith("/sw.js") || url.pathname.endsWith("/manifest.json")) return;
 
+  // Network-first for page navigations (always get the latest version)
+  if (event.request.mode === "navigate") {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put("/index.html", clone));
+          return response;
+        })
+        .catch(() => caches.match("/index.html"))
+    );
+    return;
+  }
+
+  // Cache-first for static assets (hashed bundles change, so stale cache
+  // entries are naturally bypassed once index.html points to new hashes).
   event.respondWith(
     caches.match(event.request).then((cached) => {
       if (cached) return cached;
@@ -70,7 +97,7 @@ self.addEventListener("fetch", (event) => {
           return response;
         })
         .catch(() => {
-          if (event.request.mode === "navigate") return caches.match("/index.html");
+          // offline fallback
         });
     })
   );
