@@ -80,21 +80,60 @@ export function generateQuestions(config: PracticeConfig): MathQuestion[] {
 
     case "tables": {
       const tables = config.selectedTables.length > 0 ? config.selectedTables : [12];
-      if (config.tableSelectionMode === "combinations") {
-        let idx = 0;
-        tables.forEach((t) => {
-          for (let factor = 2; factor <= 9; factor++) {
-            const prod = t * factor;
-            questions.push({ index: idx++, prompt: prod.toString(), answer: `${t}*${factor}`, type: "reverse-table" });
-          }
-        });
-        questions.sort(() => Math.random() - 0.5);
-      } else {
-        for (let i = 0; i < count; i++) {
-          const t = tables[Math.floor(Math.random() * tables.length)];
-          const factor = randomInt(2, 9);
+      // Build map from product -> list of (table, factor) within the selected tables.
+      const prodToPairsMap = new Map<number, [number, number][]>();
+      tables.forEach((t) => {
+        for (let factor = 2; factor <= 9; factor++) {
           const prod = t * factor;
-          questions.push({ index: i, prompt: prod.toString(), answer: `${t}*${factor}`, type: "reverse-table" });
+          const list = prodToPairsMap.get(prod) ?? [];
+          const alreadyHas = list.some(
+            ([a, b]) => (a === t && b === factor) || (a === factor && b === t)
+          );
+          if (!alreadyHas) list.push([t, factor]);
+          prodToPairsMap.set(prod, list);
+        }
+      });
+
+      const makeReverseQuestion = (
+        index: number,
+        prod: number,
+        pairs: [number, number][],
+        selTables: number[]
+      ): MathQuestion => {
+        const canonicalAnswer = pairs.map(([t, f]) => `${t}*${f}`).join(", ");
+        const allValidStrings = pairs.flatMap(([t, f]) => [
+          `${t}*${f}`,
+          `${f}*${t}`,
+          `${t}×${f}`,
+          `${f}×${t}`,
+          `${t}x${f}`,
+          `${f}x${t}`,
+        ]);
+        return {
+          index,
+          prompt: prod.toString(),
+          answer: canonicalAnswer,
+          type: "reverse-table",
+          targetNumber: prod,
+          allValidAnswers: allValidStrings,
+          allValidTablePairs: pairs,
+          selectedTablesForQuestion: selTables,
+          hint: "Pairs in selected tables: " + pairs.map(([t, f]) => `${t}×${f}`).join(", "),
+        };
+      };
+
+      if (config.tableSelectionMode === "combinations") {
+        const uniqueProducts = Array.from(prodToPairsMap.keys()).sort(() => Math.random() - 0.5);
+        uniqueProducts.forEach((prod) => {
+          const pairs = prodToPairsMap.get(prod) ?? [];
+          questions.push(makeReverseQuestion(questions.length, prod, pairs, tables));
+        });
+      } else {
+        const allProducts = Array.from(prodToPairsMap.keys());
+        for (let i = 0; i < count; i++) {
+          const prod = allProducts[Math.floor(Math.random() * allProducts.length)];
+          const pairs = prodToPairsMap.get(prod) ?? [];
+          questions.push(makeReverseQuestion(questions.length, prod, pairs, tables));
         }
       }
       break;
@@ -216,6 +255,41 @@ export function generateQuestions(config: PracticeConfig): MathQuestion[] {
   }
 
   return questions;
+}
+
+// ---- Factor Pair Parsing ----
+// Parses user input into a list of (a, b) pairs. Supports:
+// "21*4, 12*7", "21*4;12*7", "21x4 12x7", "21 4 12 7", "21×4, 12×7"
+export function parseFactorPairs(input: string): [number, number][] {
+  const clean = input.trim();
+  if (!clean) return [];
+  const pairs: [number, number][] = [];
+
+  const chunks = clean.split(/[,;]+/).map((c) => c.trim()).filter(Boolean);
+  for (const chunk of chunks) {
+    const tokens = chunk.split(/[*xX× ]+/).filter(Boolean);
+    if (tokens.length === 2) {
+      const a = parseInt(tokens[0], 10);
+      const b = parseInt(tokens[1], 10);
+      if (!isNaN(a) && !isNaN(b)) pairs.push([a, b]);
+    }
+  }
+  if (pairs.length > 0) return pairs;
+
+  // Fallback: single pair without symbols, or a flat list of numbers
+  const allTokens = clean.split(/[*xX×,; ]+/).filter(Boolean);
+  if (allTokens.length === 2) {
+    const a = parseInt(allTokens[0], 10);
+    const b = parseInt(allTokens[1], 10);
+    if (!isNaN(a) && !isNaN(b)) return [[a, b]];
+  } else if (allTokens.length >= 4 && allTokens.length % 2 === 0) {
+    for (let i = 0; i < allTokens.length; i += 2) {
+      const a = parseInt(allTokens[i], 10);
+      const b = parseInt(allTokens[i + 1], 10);
+      if (!isNaN(a) && !isNaN(b)) pairs.push([a, b]);
+    }
+  }
+  return pairs;
 }
 
 // ---- Answer Validation ----

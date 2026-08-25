@@ -53,6 +53,8 @@ export interface MathQuestion {
   options?: string[];
   allValidAnswers?: string[];
   hint?: string;
+  allValidTablePairs?: [number, number][];
+  selectedTablesForQuestion?: number[];
 }
 
 export interface QuestionResult {

@@ -8,6 +8,7 @@ interface MathKeypadProps {
   showMultiplySymbol?: boolean;
   showMinusSymbol?: boolean;
   showDecimal?: boolean;
+  showComma?: boolean;
 }
 
 export default function MathKeypad({
@@ -18,7 +19,9 @@ export default function MathKeypad({
   showMultiplySymbol = false,
   showMinusSymbol = false,
   showDecimal = false,
+  showComma = false,
 }: MathKeypadProps) {
+  const showExtraClear = showMultiplySymbol || showComma || showDecimal;
   return (
     <div className="w-full rounded-t-3xl bg-slate-100 px-3 py-3">
       {/* Row 1 */}
@@ -48,7 +51,9 @@ export default function MathKeypad({
         <KeypadButton label="7" onPress={() => onDigit("7")} />
         <KeypadButton label="8" onPress={() => onDigit("8")} />
         <KeypadButton label="9" onPress={() => onDigit("9")} />
-        {showDecimal ? (
+        {showComma ? (
+          <KeypadButton label="," className="bg-indigo-100 text-primary-indigo" onPress={() => onDigit(", ")} />
+        ) : showDecimal ? (
           <KeypadButton label="." onPress={() => onDigit(".")} />
         ) : showMultiplySymbol && showMinusSymbol ? (
           <KeypadButton label="-" className="bg-rose-100 text-rose-700" onPress={() => onDigit("-")} />
@@ -60,13 +65,13 @@ export default function MathKeypad({
       {/* Row 4 */}
       <div className="flex gap-2">
         <KeypadButton label="0" onPress={() => onDigit("0")} />
-        {showMultiplySymbol && !showDecimal && (
+        {showExtraClear && (
           <KeypadButton label="C" className="bg-slate-200 text-slate-700" onPress={onClear} />
         )}
         <button
           onClick={onSubmit}
           className={`h-13 py-3 rounded-xl bg-primary-indigo text-white font-black tracking-wider flex items-center justify-center gap-1.5 transition-transform active:scale-95 ${
-            showMultiplySymbol && !showDecimal ? "flex-[2]" : "flex-[3]"
+            showExtraClear ? "flex-[2]" : "flex-[3]"
           }`}
         >
           SUBMIT ✓

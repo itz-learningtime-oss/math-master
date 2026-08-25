@@ -4,8 +4,20 @@ import MathKeypad from "../components/MathKeypad";
 import { modeFromId } from "../types";
 
 export default function PracticeScreen() {
-  const { state, dispatch, submitAnswer, togglePause } = useApp();
-  const { questions, currentQuestionIndex, currentInput, elapsedSeconds, isPaused, isAnswerError, config } = state;
+  const { state, dispatch, submitAnswer, togglePause, continueToNext, revealFactorOptions } = useApp();
+  const {
+    questions,
+    currentQuestionIndex,
+    currentInput,
+    elapsedSeconds,
+    isPaused,
+    isAnswerError,
+    config,
+    tablesMultiPairPrompt,
+    tablesWarningMessage,
+    canContinueNext,
+    showFactorOptions,
+  } = state;
   const [shakeKey, setShakeKey] = useState(0);
 
   useEffect(() => {
@@ -18,6 +30,7 @@ export default function PracticeScreen() {
   const isReverseTable = currentQ.type === "reverse-table";
   const isFactors = config.mode === "factors" || currentQ.type === "factors";
   const isComplex = config.mode === "complex";
+  const multiPair = isReverseTable && (currentQ.allValidTablePairs?.length ?? 0) > 1;
   const modeMeta = modeFromId(config.mode);
 
   const updateInput = (input: string) => dispatch({ type: "UPDATE_INPUT", input });
@@ -45,7 +58,13 @@ export default function PracticeScreen() {
       {/* Problem area */}
       <div className="flex-1 flex flex-col px-5 mt-4" key={shakeKey}>
         <p className="text-center text-[11px] font-black text-slate-400 tracking-widest">
-          {isFactors ? "FIND ANY FACTOR PAIR (A × B = N, A,B ≤ 99)" : isReverseTable ? "ENTER FACTOR PAIR (e.g. 24*2)" : "SOLVE THIS"}
+          {isFactors
+            ? "FIND ANY FACTOR PAIR (A × B = N, A,B ≤ 99)"
+            : isReverseTable
+              ? multiPair
+                ? `ENTER FACTOR PAIRS (${currentQ.allValidTablePairs!.length} IN SELECTED TABLES)`
+                : "ENTER FACTOR PAIR (e.g. 24*2)"
+              : "SOLVE THIS"}
         </p>
 
         {/* Prompt card */}
@@ -62,49 +81,97 @@ export default function PracticeScreen() {
           </p>
           {isFactors && (
             <span className="block mx-auto w-fit mt-1 bg-blue-50 text-primary-indigo text-[11px] font-bold rounded-xl px-2.5 py-1">
-              Enter factor pair: A × B = {currentQ.prompt}
+              Type factor pair: A × B = {currentQ.prompt}
+            </span>
+          )}
+          {multiPair && (
+            <span className="block mx-auto w-fit mt-1 bg-indigo-50 text-primary-indigo text-[11px] font-bold rounded-lg px-2 py-0.5">
+              {currentQ.allValidTablePairs!.length} valid pairs in your selected tables
             </span>
           )}
         </div>
 
         {/* Answer display */}
         <div
-          className={`w-full h-16 rounded-2xl border-2 mt-3.5 flex items-center justify-center transition-colors ${
+          className={`w-full h-15 rounded-2xl border-2 mt-3.5 flex items-center justify-center transition-colors ${
             isAnswerError ? "bg-rose-50 border-rose-500" : "bg-slate-100 border-primary-indigo/50"
           }`}
         >
           {currentInput ? (
-            <span className={`text-[28px] font-black mono ${isAnswerError ? "text-rose-500" : "text-primary-indigo"}`}>
+            <span className={`text-2xl font-black mono truncate max-w-full px-3 ${isAnswerError ? "text-rose-500" : "text-primary-indigo"}`}>
               {currentInput}
             </span>
           ) : (
-            <span className="text-[15px] font-bold text-slate-400">
-              {isFactors ? "Tap keypad (e.g. 36×7) or pick below" : isReverseTable ? "Tap keypad (e.g. 12*2)" : "Enter answer..."}
+            <span className="text-sm font-bold text-slate-400">
+              {isFactors
+                ? "Type factor pair (e.g. 36×7)"
+                : isReverseTable
+                  ? multiPair
+                    ? "e.g. 21*4, 12*7"
+                    : "Tap keypad (e.g. 12*2)"
+                  : "Enter answer..."}
             </span>
           )}
         </div>
 
-        {/* Factor option chips */}
-        {isFactors && currentQ.options && currentQ.options.length > 0 && (
-          <div className="mt-2.5">
-            <p className="text-center text-[10px] font-black text-slate-400 tracking-widest">OR CHOOSE A VALID FACTOR PAIR:</p>
-            <div className="flex gap-1.5 mt-1.5">
-              {currentQ.options.map((opt) => {
-                const isSelected = currentInput === opt;
-                return (
-                  <button
-                    key={opt}
-                    onClick={() => updateInput(opt)}
-                    className={`flex-1 rounded-xl border py-2 text-xs font-bold mono transition-colors ${
-                      isSelected ? "bg-primary-indigo border-primary-indigo text-white" : "bg-white border-slate-200 text-slate-800"
-                    }`}
-                  >
-                    {opt}
-                  </button>
-                );
-              })}
-            </div>
+        {/* Tables warning banner */}
+        {tablesWarningMessage && (
+          <div className="w-full bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 mt-2.5 flex items-start gap-2">
+            <span className="text-amber-600 text-base">⚠️</span>
+            <p className="text-[11px] font-bold text-amber-900 leading-snug flex-1">{tablesWarningMessage}</p>
           </div>
+        )}
+
+        {/* Tables multi-pair encouragement */}
+        {tablesMultiPairPrompt && (
+          <div className="w-full bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2 mt-2.5 flex items-start gap-2">
+            <span className="text-emerald-600 text-base">✓</span>
+            <p className="text-[11px] font-bold text-emerald-900 leading-snug flex-1">{tablesMultiPairPrompt}</p>
+          </div>
+        )}
+
+        {/* Continue to next */}
+        {canContinueNext && (
+          <button
+            onClick={continueToNext}
+            className="w-full bg-emerald-500 text-white font-bold rounded-xl h-10 mt-2.5 flex items-center justify-center gap-1.5 text-xs hover:bg-emerald-600"
+          >
+            Don't remember more? Continue to Next →
+          </button>
+        )}
+
+        {/* Factors: hidden options with reveal button */}
+        {isFactors && currentQ.options && currentQ.options.length > 0 && (
+          <>
+            {!showFactorOptions ? (
+              <button
+                onClick={revealFactorOptions}
+                className="w-full bg-blue-50 border border-blue-200 text-primary-indigo font-bold rounded-xl py-2.5 mt-2.5 flex items-center justify-center gap-1.5 text-[11px]"
+              >
+                💡 Unable to remember the pair? Check Options
+              </button>
+            ) : (
+              <div className="mt-2.5">
+                <p className="text-center text-[10px] font-black text-slate-400 tracking-widest">CHOOSE A VALID FACTOR PAIR:</p>
+                <div className="flex gap-1.5 mt-1.5">
+                  {currentQ.options.map((opt) => {
+                    const isSelected = currentInput === opt;
+                    return (
+                      <button
+                        key={opt}
+                        onClick={() => updateInput(opt)}
+                        className={`flex-1 rounded-xl border py-2 text-xs font-bold mono transition-colors ${
+                          isSelected ? "bg-primary-indigo border-primary-indigo text-white" : "bg-white border-slate-200 text-slate-800"
+                        }`}
+                      >
+                        {opt}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
 
@@ -117,6 +184,7 @@ export default function PracticeScreen() {
         showMultiplySymbol={isReverseTable || isFactors}
         showMinusSymbol={isComplex || config.mode === "subtraction"}
         showDecimal={isComplex}
+        showComma={isReverseTable || isFactors}
       />
 
       {/* Pause overlay */}

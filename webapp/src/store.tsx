@@ -14,7 +14,7 @@ import type {
   GridCellResult,
 } from "./types";
 import { defaultConfig, defaultStudyState, defaultUserGoal } from "./types";
-import { generateQuestions, checkAnswer, updateStreakOnPractice } from "./engine";
+import { generateQuestions, checkAnswer, updateStreakOnPractice, parseFactorPairs } from "./engine";
 import { storage } from "./storage";
 
 // ---- State shape ----
@@ -35,6 +35,13 @@ export interface AppState {
   sessions: PracticeSessionEntity[];
   goal: UserGoalEntity | null;
   showNamePromptDialog: boolean;
+  // Tables reverse-practice: multi-pair state
+  tablesMultiPairPrompt: string | null;
+  tablesWarningMessage: string | null;
+  foundPairsForCurrentQuestion: [number, number][];
+  canContinueNext: boolean;
+  // Factors practice: hidden options reveal
+  showFactorOptions: boolean;
 }
 
 const initialGoal = storage.loadGoal() ?? defaultUserGoal();
@@ -57,6 +64,11 @@ const initialState: AppState = {
   goal: initialGoal,
   // On first launch (no saved name), auto-show the "What is your name?" dialog.
   showNamePromptDialog: initialGoal.userName.trim() === "",
+  tablesMultiPairPrompt: null,
+  tablesWarningMessage: null,
+  foundPairsForCurrentQuestion: [],
+  canContinueNext: false,
+  showFactorOptions: false,
 };
 
 // ---- Actions ----
@@ -77,6 +89,8 @@ type Action =
   | { type: "SUBMIT_CORRECT"; result: QuestionResult }
   | { type: "ADVANCE_QUESTION" }
   | { type: "FINISH"; mode: PracticeModeId }
+  | { type: "TABLES_PROGRESS"; foundPairs: [number, number][]; prompt: string | null; warning: string | null; canContinue: boolean }
+  | { type: "REVEAL_FACTOR_OPTIONS" }
   | { type: "GRID_SUBMIT"; input: string }
   | { type: "GRID_FINISH"; totalTime: number }
   | { type: "SAVE_GOAL"; target: number; hour: number; minute: number; enabled: boolean }
@@ -179,6 +193,11 @@ function reducer(state: AppState, action: Action): AppState {
         isPaused: false,
         elapsedSeconds: 0,
         results: [],
+        tablesMultiPairPrompt: null,
+        tablesWarningMessage: null,
+        foundPairsForCurrentQuestion: [],
+        canContinueNext: false,
+        showFactorOptions: false,
       };
     }
     case "START_GRID": {
@@ -223,7 +242,29 @@ function reducer(state: AppState, action: Action): AppState {
     case "SUBMIT_CORRECT":
       return { ...state, results: [...state.results, action.result], currentInput: "" };
     case "ADVANCE_QUESTION":
-      return { ...state, currentQuestionIndex: state.currentQuestionIndex + 1 };
+      return {
+        ...state,
+        currentQuestionIndex: state.currentQuestionIndex + 1,
+        currentInput: "",
+        isAnswerError: false,
+        tablesMultiPairPrompt: null,
+        tablesWarningMessage: null,
+        foundPairsForCurrentQuestion: [],
+        canContinueNext: false,
+        showFactorOptions: false,
+      };
+    case "TABLES_PROGRESS":
+      return {
+        ...state,
+        currentInput: "",
+        isAnswerError: false,
+        foundPairsForCurrentQuestion: action.foundPairs,
+        tablesMultiPairPrompt: action.prompt,
+        tablesWarningMessage: action.warning,
+        canContinueNext: action.canContinue,
+      };
+    case "REVEAL_FACTOR_OPTIONS":
+      return { ...state, showFactorOptions: true };
     case "FINISH": {
       const results = state.results;
       const totalTime = state.elapsedSeconds;
@@ -423,6 +464,8 @@ interface AppContextValue {
   submitGridAnswer: (input: string) => void;
   saveDailyGoal: (target: number, hour: number, minute: number, enabled: boolean) => void;
   goBack: () => void;
+  continueToNext: () => void;
+  revealFactorOptions: () => void;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -445,42 +488,201 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [state.config.mode]);
 
   const submitAnswer = useCallback(() => {
-    const { questions, currentQuestionIndex, currentInput, config, elapsedSeconds, results } = state;
+    const { questions, currentQuestionIndex, currentInput, config, elapsedSeconds, foundPairsForCurrentQuestion, canContinueNext } = state;
     if (currentQuestionIndex >= questions.length) return;
     const q = questions[currentQuestionIndex];
-    const isCorrect = checkAnswer(currentInput, q, config);
+    const rawInput = currentInput.trim();
 
+    // ---- Tables reverse-practice: multi-pair flow ----
+    if (q.type === "reverse-table") {
+      const targetProd = q.targetNumber ?? parseInt(q.prompt, 10) ?? 0;
+      const validPairsInSelected: [number, number][] =
+        q.allValidTablePairs && q.allValidTablePairs.length > 0
+          ? q.allValidTablePairs
+          : (q.selectedTablesForQuestion && q.selectedTablesForQuestion.length > 0
+              ? q.selectedTablesForQuestion
+              : config.selectedTables
+            )
+              .filter((t) => targetProd % t === 0 && targetProd / t >= 2 && targetProd / t <= 99)
+              .map((t) => [t, targetProd / t] as [number, number]);
+      const selectedTables =
+        q.selectedTablesForQuestion && q.selectedTablesForQuestion.length > 0
+          ? q.selectedTablesForQuestion
+          : config.selectedTables;
+
+      const parsedPairs = parseFactorPairs(rawInput);
+      if (parsedPairs.length === 0) {
+        dispatch({ type: "SET_ERROR", value: true });
+        window.setTimeout(() => dispatch({ type: "SET_ERROR", value: false }), 500);
+        return;
+      }
+
+      let hasInvalidProduct = false;
+      let outsideTableWarning: string | null = null;
+      const matchedCanonicalPairs: [number, number][] = [];
+
+      for (const [a, b] of parsedPairs) {
+        if (a * b !== targetProd) {
+          hasInvalidProduct = true;
+          break;
+        }
+        const matched = validPairsInSelected.find(
+          ([x, y]) => (x === a && y === b) || (x === b && y === a)
+        );
+        if (matched) {
+          matchedCanonicalPairs.push(matched);
+        } else {
+          const selListStr = [...selectedTables].sort((x, y) => x - y).join(", ");
+          outsideTableWarning = `⚠️ ${a} × ${b} = ${targetProd} is valid, but is outside your selected tables (${selListStr}). Please choose within your selected table numbers!`;
+        }
+      }
+
+      if (hasInvalidProduct) {
+        dispatch({ type: "SET_ERROR", value: true });
+        window.setTimeout(() => dispatch({ type: "SET_ERROR", value: false }), 500);
+        return;
+      }
+
+      if (outsideTableWarning != null && matchedCanonicalPairs.length === 0) {
+        dispatch({
+          type: "TABLES_PROGRESS",
+          foundPairs: foundPairsForCurrentQuestion,
+          prompt: null,
+          warning: outsideTableWarning,
+          canContinue: canContinueNext,
+        });
+        return;
+      }
+
+      const currentFound = [...foundPairsForCurrentQuestion];
+      matchedCanonicalPairs.forEach((cp) => {
+        if (!currentFound.some(([x, y]) => (x === cp[0] && y === cp[1]) || (x === cp[1] && y === cp[0]))) {
+          currentFound.push(cp);
+        }
+      });
+
+      const totalPossible = validPairsInSelected.length;
+
+      if (currentFound.length >= totalPossible || totalPossible <= 1) {
+        // All pairs found (or only one possible) — record the result and move on.
+        const formatted = currentFound.map(([a, b]) => `${a} × ${b}`).join(", ");
+        const expected = validPairsInSelected.map(([a, b]) => `${a} × ${b}`).join(", ");
+        const result: QuestionResult = {
+          prompt: `Table factor pairs of ${targetProd}`,
+          userAnswer: formatted,
+          expectedAnswer: expected || q.answer,
+          isCorrect: true,
+          timeTakenSec: elapsedSeconds,
+        };
+        dispatch({ type: "SUBMIT_CORRECT", result });
+        if (currentQuestionIndex + 1 < questions.length) {
+          dispatch({ type: "ADVANCE_QUESTION" });
+        } else {
+          dispatch({ type: "FINISH", mode: config.mode });
+        }
+      } else {
+        const foundStr = currentFound.map(([a, b]) => `${a}×${b}`).join(", ");
+        const promptMsg = `Think of other pairs if you remember (${currentFound.length} of ${totalPossible} found: ${foundStr})`;
+        dispatch({
+          type: "TABLES_PROGRESS",
+          foundPairs: currentFound,
+          prompt: promptMsg,
+          warning: outsideTableWarning,
+          canContinue: true,
+        });
+      }
+      return;
+    }
+
+    // ---- Factors practice ----
+    if (q.type === "factors" || config.mode === "factors") {
+      const inputVal = rawInput.replace(/\s/g, "").replace(/x/g, "*").replace(/X/g, "*").replace(/×/g, "*");
+      const tokens = inputVal.split(/[*xX×, ]+/).filter(Boolean);
+      let isCorrect = false;
+      if (tokens.length === 2) {
+        const a = parseInt(tokens[0], 10);
+        const b = parseInt(tokens[1], 10);
+        const target = q.targetNumber ?? parseInt(q.prompt, 10) ?? 0;
+        if (!isNaN(a) && !isNaN(b) && a >= 2 && b >= 2 && a <= 99 && b <= 99 && a * b === target) {
+          isCorrect = true;
+        }
+      } else {
+        isCorrect = q.allValidAnswers?.some((v) => v.replace(/\s/g, "").toLowerCase() === inputVal.toLowerCase()) ?? false;
+      }
+      if (!isCorrect) {
+        dispatch({ type: "SET_ERROR", value: true });
+        window.setTimeout(() => dispatch({ type: "SET_ERROR", value: false }), 500);
+        return;
+      }
+      const result: QuestionResult = {
+        prompt: `Factors of ${q.targetNumber ?? q.prompt}`,
+        userAnswer: tokens.length === 2 ? `${tokens[0]} × ${tokens[1]}` : inputVal,
+        expectedAnswer: q.hint ? q.hint : q.answer,
+        isCorrect: true,
+        timeTakenSec: elapsedSeconds,
+      };
+      dispatch({ type: "SUBMIT_CORRECT", result });
+      if (currentQuestionIndex + 1 < questions.length) {
+        dispatch({ type: "ADVANCE_QUESTION" });
+      } else {
+        dispatch({ type: "FINISH", mode: config.mode });
+      }
+      return;
+    }
+
+    // ---- Standard numeric / string questions ----
+    const isCorrect = checkAnswer(currentInput, q, config);
     if (!isCorrect) {
       dispatch({ type: "SET_ERROR", value: true });
       window.setTimeout(() => dispatch({ type: "SET_ERROR", value: false }), 500);
       return;
     }
-
     const inputVal = currentInput.trim().replace(/\s/g, "").replace(/x/g, "*").replace(/X/g, "*");
-    const formattedUserAnswer =
-      q.type === "factors"
-        ? (() => {
-            const tokens = inputVal.split(/[*xX×, ]+/).filter(Boolean);
-            return tokens.length === 2 ? `${tokens[0]} × ${tokens[1]}` : inputVal;
-          })()
-        : inputVal;
-
     const result: QuestionResult = {
-      prompt: q.type === "factors" ? `Factors of ${q.targetNumber ?? q.prompt}` : q.prompt,
-      userAnswer: formattedUserAnswer,
-      expectedAnswer: q.type === "factors" && q.hint ? q.hint : q.answer,
+      prompt: q.prompt,
+      userAnswer: inputVal,
+      expectedAnswer: q.answer,
       isCorrect: true,
       timeTakenSec: elapsedSeconds,
     };
-
     dispatch({ type: "SUBMIT_CORRECT", result });
     if (currentQuestionIndex + 1 < questions.length) {
       dispatch({ type: "ADVANCE_QUESTION" });
     } else {
       dispatch({ type: "FINISH", mode: config.mode });
     }
-    void results;
   }, [state]);
+
+  const continueToNext = useCallback(() => {
+    const { questions, currentQuestionIndex, config, elapsedSeconds, foundPairsForCurrentQuestion } = state;
+    if (currentQuestionIndex >= questions.length) return;
+    const q = questions[currentQuestionIndex];
+    const target = q.targetNumber ?? parseInt(q.prompt, 10) ?? 0;
+    const validPairs = q.allValidTablePairs ?? [];
+    const formattedUserAnswer =
+      foundPairsForCurrentQuestion.length > 0
+        ? foundPairsForCurrentQuestion.map(([a, b]) => `${a} × ${b}`).join(", ") +
+          (validPairs.length > 1 ? ` (${foundPairsForCurrentQuestion.length}/${validPairs.length} found)` : "")
+        : "Skipped";
+    const expected = validPairs.length > 0 ? validPairs.map(([a, b]) => `${a} × ${b}`).join(", ") : q.answer;
+    const result: QuestionResult = {
+      prompt: `Table factor pairs of ${target}`,
+      userAnswer: formattedUserAnswer,
+      expectedAnswer: expected,
+      isCorrect: foundPairsForCurrentQuestion.length > 0,
+      timeTakenSec: elapsedSeconds,
+    };
+    dispatch({ type: "SUBMIT_CORRECT", result });
+    if (currentQuestionIndex + 1 < questions.length) {
+      dispatch({ type: "ADVANCE_QUESTION" });
+    } else {
+      dispatch({ type: "FINISH", mode: config.mode });
+    }
+  }, [state]);
+
+  const revealFactorOptions = useCallback(() => {
+    dispatch({ type: "REVEAL_FACTOR_OPTIONS" });
+  }, []);
 
   const submitGridAnswer = useCallback(
     (input: string) => {
@@ -570,8 +772,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       submitGridAnswer,
       saveDailyGoal,
       goBack,
+      continueToNext,
+      revealFactorOptions,
     }),
-    [state, navigate, startPractice, submitAnswer, togglePause, submitGridAnswer, saveDailyGoal, goBack]
+    [state, navigate, startPractice, submitAnswer, togglePause, submitGridAnswer, saveDailyGoal, goBack, continueToNext, revealFactorOptions]
   );
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
