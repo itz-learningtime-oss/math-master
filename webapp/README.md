@@ -62,10 +62,12 @@ Click **Save and Deploy**. Every push to `main` auto-deploys.
 
 1. **Create KV namespace** `MATH_MASTER_KV` (Dashboard → Workers & Pages → KV → Create).
 2. **Bind it** to the Pages project: *Settings → Functions → KV namespace bindings* → add `MATH_MASTER_KV`.
-3. **Compatibility flag**: *Settings → Functions* → add `nodejs_compat`.
+3. **Compatibility flag (REQUIRED for push to work)**: *Settings → Functions → Compatibility flags* → add `nodejs_compat`.
+   > ⚠️ The `web-push` library needs Node's crypto, which requires this flag. Without it, the test notification will fail on the server. After changing it, **Retry deployment** (Settings changes don't auto-redeploy).
 4. **Environment variables**:
    - `VAPID_PUBLIC_KEY` = `BI7Bmi6uZ8eJnKY-YFCtF5FJGs2zPA_D8zYwg6CR2SFJ6qLgmqdnDINTIx-lL_N5J1jJZNdVAnKmjbAXQPxcobc`
    - `VAPID_PRIVATE_KEY` = `bBGim8F-uKOA4bPgEH2wLoGcIC58saAZVIIfy5tbcw4`
+   > ⚠️ The client subscribes with the public key above (hardcoded in the app). The `VAPID_PRIVATE_KEY` must be its exact matching private key — if you generate your own pair you must update BOTH `src/workers/push.ts` and these vars.
 5. **Reminder cron Worker**: Dashboard → Create → Worker → paste `worker/src/index.js`, cron `*/15 * * * *`, bind the same KV + VAPID vars.
 
 ---

@@ -78,12 +78,18 @@ export default function DashboardScreen() {
         return;
       }
       setIsEnabled(true);
-      const ok = await sendTestPush();
-      setNotifStatus(
-        ok
-          ? "Test notification sent! Check your notification shade. ✅"
-          : "Subscribed, but the server didn't confirm delivery. Make sure KV + VAPID vars are set in the Pages dashboard (Settings → Functions / Environment variables)."
-      );
+      const result = await sendTestPush();
+      if (result.ok) {
+        setNotifStatus("Test notification sent! Check your notification shade. ✅");
+      } else {
+        // Show the actual server error so the user can fix the root cause.
+        const hint = /crypto|ECDH|encrypt|not defined|web-push|webpush/i.test(result.error || "")
+          ? " (The 'nodejs_compat' compatibility flag is likely missing → Pages Settings → Functions → Compatibility flags → add 'nodejs_compat', then Retry deployment)"
+          : /vapid|unauthorized|401|403/i.test(result.error || "")
+            ? " (VAPID keys mismatch → make sure VAPID_PRIVATE_KEY / VAPID_PUBLIC_KEY match the values in the README exactly)"
+            : " (Check KV binding + VAPID vars in the Pages dashboard, then Retry deployment)";
+        setNotifStatus(`Delivery failed: ${result.error}${hint}`);
+      }
     } catch (e) {
       setNotifStatus("Error: " + String(e));
     }

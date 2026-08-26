@@ -12,14 +12,20 @@ export async function onRequestPost(context) {
       return new Response(JSON.stringify({ error: "Missing subscription" }), { status: 400, headers: { "Content-Type": "application/json" } });
     }
 
-    const ok = await sendPush(
+    const result = await sendPush(
       env,
       subscription,
       "Math Master Daily Goal 🎯",
       "You're on a streak! Complete your daily problems today."
     );
 
-    return new Response(JSON.stringify({ ok }), { status: ok ? 200 : 502, headers: { "Content-Type": "application/json" } });
+    if (result.ok) {
+      return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }
+    return new Response(
+      JSON.stringify({ ok: false, error: result.error || "Delivery failed", statusCode: result.statusCode || null }),
+      { status: 502, headers: { "Content-Type": "application/json" } }
+    );
   } catch (e) {
     return new Response(JSON.stringify({ error: String(e) }), { status: 500, headers: { "Content-Type": "application/json" } });
   }

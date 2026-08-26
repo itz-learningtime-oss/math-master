@@ -90,18 +90,28 @@ export async function saveSubscriptionToBackend(sub: PushSubscription, hour: num
   }
 }
 
-export async function sendTestPush(): Promise<boolean> {
+export async function sendTestPush(): Promise<{ ok: boolean; error?: string }> {
   try {
     const sub = await getSubscription();
-    if (!sub) return false;
+    if (!sub) return { ok: false, error: "No push subscription found." };
     const resp = await fetch("/api/send-test", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ subscription: sub }),
     });
-    return resp.ok;
-  } catch {
-    return false;
+    if (!resp.ok) {
+      let errMsg = `Server responded with ${resp.status}`;
+      try {
+        const body = await resp.json();
+        if (body && body.error) errMsg = body.error;
+      } catch {
+        // ignore parse failure
+      }
+      return { ok: false, error: errMsg };
+    }
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: String(e) };
   }
 }
 

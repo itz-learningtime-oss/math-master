@@ -77,7 +77,7 @@ export async function sendPush(env, subscription, title, body) {
   const payload = JSON.stringify({ title, body });
   try {
     await webpush.sendNotification(subscription, payload, { TTL: 300 });
-    return true;
+    return { ok: true };
   } catch (err) {
     const statusCode = err && err.statusCode;
     // 404/410 means the subscription is no longer valid -> remove it
@@ -88,6 +88,7 @@ export async function sendPush(env, subscription, title, body) {
         // ignore
       }
     }
-    return false;
+    const reason = err && err.message ? err.message : String(err);
+    return { ok: false, error: reason, statusCode };
   }
 }
