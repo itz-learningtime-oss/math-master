@@ -1,0 +1,26 @@
+name: Reminder Ping
+
+# Cloudflare's built-in cron trigger is not firing on this account, so we use
+# GitHub Actions as the reliable external scheduler: it pings the Worker's
+# /cron endpoint every 5 minutes, which checks all reminders and sends pushes.
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger reminder worker
+        run: |
+          curl -sS -o /tmp/reminder.json -w "HTTP %{http_code}\n" \
+            "https://math-master-reminder.www-itzlearningtime.workers.dev/cron"
+          cat /tmp/reminder.json
+          echo
+      - name: Fail loudly if the worker is down
+        run: |
+          if ! grep -q '"sent"\|"checked"' /tmp/reminder.json; then
+            echo "::error::Reminder worker did not respond correctly"
+            exit 1
+          fi

@@ -1,6 +1,8 @@
 // Math Master - Daily Reminder Scheduler Worker
-// Runs on a cron trigger and sends push notifications to users whose
-// configured reminder time matches the current time (in UTC).
+// Sends push notifications when the current UTC time matches a user's
+// configured reminder time. Can be triggered either by a Cloudflare cron
+// trigger (scheduled) or by an external HTTP ping (/cron) — the external
+// ping is the reliable fallback if cron triggers aren't firing.
 // Uses webpush-webcrypto (WebCrypto API) — works on the Workers runtime.
 import { generatePushHTTPRequest, ApplicationServerKeys } from "webpush-webcrypto";
 
@@ -11,28 +13,24 @@ const DEFAULT_PRIVATE =
 const DEFAULT_SUBJECT = "mailto:www.itzlearningtime@gmail.com";
 
 export default {
+  // Cloudflare cron trigger (currently not firing on this account).
   async scheduled(controller, env, ctx) {
     const now = new Date();
-    const hour = now.getHours();
-    const minute = now.getMinutes();
-
-    // Diagnostics: track when the cron last ran and how many times.
-    await env.MATH_MASTER_KV.put("meta:lastRanAt", now.toISOString());
-    const prevCount = parseInt((await env.MATH_MASTER_KV.get("meta:runCount")) || "0", 10);
-    await env.MATH_MASTER_KV.put("meta:runCount", String(prevCount + 1));
-
-    const keys = await env.MATH_MASTER_KV.list({ prefix: "sub:" });
-    const tasks = [];
-    for (const key of keys.keys) {
-      if (key.name.startsWith("meta:")) continue;
-      tasks.push(processRecord(env, key.name, hour, minute));
-    }
-    await Promise.allSettled(tasks);
+    await runReminders(env, now.getHours(), now.getMinutes());
   },
 
-  // Health-check + diagnostics + manual test-send
   async fetch(request, env) {
     const url = new URL(request.url);
+
+    // External cron ping: same logic as the scheduled handler, but HTTP.
+    if (url.pathname === "/cron" || url.pathname === "/trigger") {
+      const now = new Date();
+      const summary = await runReminders(env, now.getHours(), now.getMinutes());
+      return new Response(JSON.stringify(summary, null, 2), {
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
     if (url.pathname === "/debug") {
       const now = new Date();
       const keys = await env.MATH_MASTER_KV.list({ prefix: "sub:" });
@@ -104,26 +102,52 @@ export default {
   },
 };
 
+// Shared reminder logic (used by both the cron trigger and the HTTP /cron ping).
+async function runReminders(env, hour, minute) {
+  await env.MATH_MASTER_KV.put("meta:lastRanAt", new Date().toISOString());
+  const prevCount = parseInt((await env.MATH_MASTER_KV.get("meta:runCount")) || "0", 10);
+  await env.MATH_MASTER_KV.put("meta:runCount", String(prevCount + 1));
+
+  const keys = await env.MATH_MASTER_KV.list({ prefix: "sub:" });
+  let checked = 0;
+  let sent = 0;
+  let errors = 0;
+
+  const tasks = [];
+  for (const key of keys.keys) {
+    if (key.name.startsWith("meta:")) continue;
+    checked++;
+    tasks.push(
+      processRecord(env, key.name, hour, minute).then((res) => {
+        if (res === "sent") sent++;
+        else if (res === "error") errors++;
+      })
+    );
+  }
+  await Promise.allSettled(tasks);
+
+  return { hour, minute, checked, sent, errors };
+}
+
 async function processRecord(env, key, hour, minute) {
   try {
     const raw = await env.MATH_MASTER_KV.get(key);
-    if (!raw) return;
+    if (!raw) return "skip";
     const record = JSON.parse(raw);
 
-    if (!record.enabled) return;
+    if (!record.enabled) return "skip";
 
-    // Minute-of-day circular matching, but only fire AT or AFTER the set time.
+    // Minute-of-day circular matching, only fire AT or AFTER the set time.
     const currentMod = hour * 60 + minute;
     const reminderMod = record.hour * 60 + record.minute;
     let diff = currentMod - reminderMod;
     if (diff < 0) diff += 1440; // not reached yet today
-    // Fire only within 5 min after the set time (5-min cron), and not >5 min late.
-    if (diff > 5) return;
+    if (diff > 5) return "skip"; // 5-minute window (external ping every 5 min)
 
     // Prevent duplicate sends within the same day.
     const today = new Date().toISOString().slice(0, 10);
     const firedKey = key + ":fired:" + today;
-    if (await env.MATH_MASTER_KV.get(firedKey)) return;
+    if (await env.MATH_MASTER_KV.get(firedKey)) return "skip";
 
     const result = await sendPush(
       env,
@@ -134,14 +158,16 @@ async function processRecord(env, key, hour, minute) {
 
     if (result.ok) {
       await env.MATH_MASTER_KV.put(firedKey, "1");
-    } else {
-      await env.MATH_MASTER_KV.put("meta:lastError", result.error || "send failed");
-      if (result.statusCode === 404 || result.statusCode === 410) {
-        await env.MATH_MASTER_KV.delete(key);
-      }
+      return "sent";
     }
+    await env.MATH_MASTER_KV.put("meta:lastError", result.error || "send failed");
+    if (result.statusCode === 404 || result.statusCode === 410) {
+      await env.MATH_MASTER_KV.delete(key);
+    }
+    return "error";
   } catch (e) {
     await env.MATH_MASTER_KV.put("meta:lastError", String(e));
+    return "error";
   }
 }
 
