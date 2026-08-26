@@ -30,9 +30,10 @@ math-webapp/
 ├── public/
 │   ├── sw.js               # Service worker (push + PWA cache)
 │   └── manifest.json       # PWA manifest
-├── wrangler.toml           # Pages project config (KV binding)
 └── vite.config.ts
 ```
+
+> ℹ️ There is **no `wrangler.toml`** in this project — all Cloudflare configuration (KV binding, compatibility flag, env vars) is done in the dashboard so it never blocks deployment or locks bindings to a file.
 
 ---
 
@@ -57,8 +58,7 @@ Cloudflare Pages connects directly to the GitHub repo, so **no Wrangler CLI is n
 Click **Save and Deploy**. Every push to `main` auto-deploys.
 
 ### 3. Enable push notifications
-> The site works without this step. Notifications are configured via the Cloudflare dashboard — no CLI / file edits needed.
-> The `wrangler.toml` intentionally has no KV id so deployment never fails on that.
+> The site works without this step. All configuration is done in the Cloudflare dashboard — there is **no `wrangler.toml`** in this project, so dashboard bindings are never locked to a file.
 
 1. **Create KV namespace** `MATH_MASTER_KV` (Dashboard → Workers & Pages → KV → Create).
 2. **Bind it** to the Pages project: *Settings → Functions → KV namespace bindings* → add `MATH_MASTER_KV`.
@@ -99,9 +99,7 @@ npm run build        # outputs to dist/
 npx wrangler kv namespace create MATH_MASTER_KV
 ```
 
-Copy the printed **id** and paste it into **both**:
-- `wrangler.toml` → `[[kv_namespaces]] id =`
-- `worker/wrangler.toml` → `[[kv_namespaces]] id =`
+Copy the printed **id** and bind it in the dashboard (recommended): *Settings → Functions → KV namespace bindings*. (If you prefer file-based config, create a local `wrangler.toml` in the project root with `[[kv_namespaces]] binding = "MATH_MASTER_KV"` and the id.)
 
 ### Step 3 — Set the VAPID private key secret
 
@@ -126,7 +124,7 @@ This uploads the static site **and** the `functions/` directory (Pages Functions
 cd worker
 npm install
 npx wrangler kv namespace create MATH_MASTER_KV   # (or reuse the id above)
-# edit worker/wrangler.toml with the KV id
+# worker/wrangler.toml already contains the binding placeholder — set its real KV id there
 npx wrangler secret put VAPID_PRIVATE_KEY          # same private key
 npx wrangler deploy
 ```
