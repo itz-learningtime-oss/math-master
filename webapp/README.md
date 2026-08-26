@@ -62,12 +62,11 @@ Click **Save and Deploy**. Every push to `main` auto-deploys.
 
 1. **Create KV namespace** `MATH_MASTER_KV` (Dashboard → Workers & Pages → KV → Create).
 2. **Bind it** to the Pages project: *Settings → Functions → KV namespace bindings* → add `MATH_MASTER_KV`.
-3. **Compatibility flag (REQUIRED for push to work)**: *Settings → Functions → Compatibility flags* → add `nodejs_compat`.
-   > ⚠️ The `web-push` library needs Node's crypto, which requires this flag. Without it, the test notification will fail on the server. After changing it, **Retry deployment** (Settings changes don't auto-redeploy).
+3. **Compatibility flag (RECOMMENDED)**: *Settings → Functions → Compatibility flags* → add `nodejs_compat` (helps bundling; the push code itself uses WebCrypto so it works with or without it). After changing it, **Retry deployment** (Settings changes don't auto-redeploy).
 4. **Environment variables**:
    - `VAPID_PUBLIC_KEY` = `BI7Bmi6uZ8eJnKY-YFCtF5FJGs2zPA_D8zYwg6CR2SFJ6qLgmqdnDINTIx-lL_N5J1jJZNdVAnKmjbAXQPxcobc`
-   - `VAPID_PRIVATE_KEY` = `bBGim8F-uKOA4bPgEH2wLoGcIC58saAZVIIfy5tbcw4`
-   > ⚠️ The client subscribes with the public key above (hardcoded in the app). The `VAPID_PRIVATE_KEY` must be its exact matching private key — if you generate your own pair you must update BOTH `src/workers/push.ts` and these vars.
+   - `VAPID_PRIVATE_KEY` = `MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgbBGim8F-uKOA4bPgEH2wLoGcIC58saAZVIIfy5tbcw6hRANCAASOwZourmfHiZymPmBQrReRSRrNszwPw_M2MIOgkdkhSeqi4JqnZwyDUyMfpS_zeSdYyWTXVQJypo2wF0D8XKG3`
+   > ⚠️ The client subscribes with the public key above (hardcoded in the app). The `VAPID_PRIVATE_KEY` is its **PKCS8-encoded** match (new format required by the WebCrypto push library). If you leave the env var unset, the built-in default is used.
 5. **Reminder cron Worker**: Dashboard → Create → Worker → paste `worker/src/index.js`, cron `*/15 * * * *`, bind the same KV + VAPID vars.
 
 ---
@@ -95,10 +94,10 @@ Copy the printed **id** and paste it into **both**:
 
 ```bash
 npx wrangler pages secret put VAPID_PRIVATE_KEY --project-name math-master
-# value: bBGim8F-uKOA4bPgEH2wLoGcIC58saAZVIIfy5tbcw4
+# value: MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgbBGim8F-uKOA4bPgEH2wLoGcIC58saAZVIIfy5tbcw6hRANCAASOwZourmfHiZymPmBQrReRSRrNszwPw_M2MIOgkdkhSeqi4JqnZwyDUyMfpS_zeSdYyWTXVQJypo2wF0D8XKG3
 ```
 
-> If you generate your own keys (`npx web-push generate-vapid-keys`), update the public key in **both** `src/workers/push.ts` and `wrangler.toml`.
+> The push library uses WebCrypto, so the private key must be **PKCS8-encoded** (format above). The `web-push` package is no longer used.
 
 ### Step 4 — Deploy the Pages project
 

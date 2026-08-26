@@ -1,9 +1,13 @@
 // Shared config & helpers for Cloudflare Pages Functions (push notifications)
-import webpush from "web-push";
+// Uses webpush-webcrypto (WebCrypto API) which works on the Workers runtime —
+// unlike the `web-push` npm package which needs Node's crypto.createECDH.
+import { generatePushHTTPRequest, ApplicationServerKeys } from "webpush-webcrypto";
 
 const DEFAULT_PUBLIC =
   "BI7Bmi6uZ8eJnKY-YFCtF5FJGs2zPA_D8zYwg6CR2SFJ6qLgmqdnDINTIx-lL_N5J1jJZNdVAnKmjbAXQPxcobc";
-const DEFAULT_PRIVATE = "bBGim8F-uKOA4bPgEH2wLoGcIC58saAZVIIfy5tbcw4";
+// PKCS8-encoded EC private key (base64url), paired with DEFAULT_PUBLIC.
+const DEFAULT_PRIVATE =
+  "MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgbBGim8F-uKOA4bPgEH2wLoGcIC58saAZVIIfy5tbcw6hRANCAASOwZourmfHiZymPmBQrReRSRrNszwPw_M2MIOgkdkhSeqi4JqnZwyDUyMfpS_zeSdYyWTXVQJypo2wF0D8XKG3";
 const DEFAULT_SUBJECT = "mailto:www.itzlearningtime@gmail.com";
 
 // Resolve VAPID keys from context.env (dashboard) first, then hardcoded defaults.
@@ -13,12 +17,6 @@ export function getVapid(env) {
     privateKey: (env && env.VAPID_PRIVATE_KEY) || DEFAULT_PRIVATE,
     subject: (env && env.VAPID_SUBJECT) || DEFAULT_SUBJECT,
   };
-}
-
-export function initWebPush(env) {
-  const v = getVapid(env);
-  webpush.setVapidDetails(v.subject, v.publicKey, v.privateKey);
-  return v;
 }
 
 // KV keys
@@ -73,22 +71,44 @@ export async function listSubscriptions(env) {
 }
 
 export async function sendPush(env, subscription, title, body) {
-  initWebPush(env);
-  const payload = JSON.stringify({ title, body });
   try {
-    await webpush.sendNotification(subscription, payload, { TTL: 300 });
+    const v = getVapid(env);
+    const appKeys = await ApplicationServerKeys.fromJSON({
+      publicKey: v.publicKey,
+      privateKey: v.privateKey,
+    });
+
+    const { headers, body: encryptedBody, endpoint } = await generatePushHTTPRequest({
+      payload: JSON.stringify({ title, body }),
+      applicationServerKeys: appKeys,
+      target: {
+        endpoint: subscription.endpoint,
+        keys: {
+          p256dh: subscription.keys.p256dh,
+          auth: subscription.keys.auth,
+        },
+      },
+      adminContact: v.subject,
+      ttl: 300,
+    });
+
+    const resp = await fetch(endpoint, { method: "POST", headers, body: encryptedBody });
+    if (!resp.ok) {
+      const statusCode = resp.status;
+      const text = await resp.text();
+      // 404/410 means the subscription is no longer valid -> remove it
+      if ((statusCode === 404 || statusCode === 410) && getKV(env)) {
+        try {
+          await getKV(env).delete(subKey(subscription.endpoint));
+        } catch {
+          // ignore
+        }
+      }
+      return { ok: false, error: `${statusCode} ${text.slice(0, 200)}`, statusCode };
+    }
     return { ok: true };
   } catch (err) {
-    const statusCode = err && err.statusCode;
-    // 404/410 means the subscription is no longer valid -> remove it
-    if ((statusCode === 404 || statusCode === 410) && getKV(env)) {
-      try {
-        await getKV(env).delete(subKey(subscription.endpoint));
-      } catch {
-        // ignore
-      }
-    }
     const reason = err && err.message ? err.message : String(err);
-    return { ok: false, error: reason, statusCode };
+    return { ok: false, error: reason };
   }
 }

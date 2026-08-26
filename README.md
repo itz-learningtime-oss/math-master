@@ -56,7 +56,8 @@ Click **Save and Deploy**. Every push to `main` now auto-deploys.
 - Under **Settings → Functions → Compatibility flags**, add `nodejs_compat`.
 - Under **Settings → Environment variables**, add:
   - `VAPID_PUBLIC_KEY` = `BI7Bmi6uZ8eJnKY-YFCtF5FJGs2zPA_D8zYwg6CR2SFJ6qLgmqdnDINTIx-lL_N5J1jJZNdVAnKmjbAXQPxcobc`
-  - `VAPID_PRIVATE_KEY` = `bBGim8F-uKOA4bPgEH2wLoGcIC58saAZVIIfy5tbcw4`
+  - `VAPID_PRIVATE_KEY` = `MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgbBGim8F-uKOA4bPgEH2wLoGcIC58saAZVIIfy5tbcw6hRANCAASOwZourmfHiZymPmBQrReRSRrNszwPw_M2MIOgkdkhSeqi4JqnZwyDUyMfpS_zeSdYyWTXVQJypo2wF0D8XKG3`
+  > ⚠️ `VAPID_PRIVATE_KEY` must be **PKCS8-encoded** (the value above) — the push backend now uses WebCrypto (`webpush-webcrypto`), not the `web-push` npm package.
 
 **d. Deploy the reminder cron Worker** (for automatic daily reminders)
 - Dashboard → **Workers & Pages** → **Create** → **Worker** → paste the contents of `webapp/worker/src/index.js`

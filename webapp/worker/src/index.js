@@ -1,16 +1,18 @@
 // Math Master - Daily Reminder Scheduler Worker
 // Runs on a cron trigger and sends push notifications to users whose
 // configured reminder time matches the current time.
-import webpush from "web-push";
+// Uses webpush-webcrypto (WebCrypto API) — works on the Workers runtime,
+// unlike `web-push` which requires Node's crypto.createECDH.
+import { generatePushHTTPRequest, ApplicationServerKeys } from "webpush-webcrypto";
+
+const DEFAULT_PUBLIC =
+  "BI7Bmi6uZ8eJnKY-YFCtF5FJGs2zPA_D8zYwg6CR2SFJ6qLgmqdnDINTIx-lL_N5J1jJZNdVAnKmjbAXQPxcobc";
+const DEFAULT_PRIVATE =
+  "MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgbBGim8F-uKOA4bPgEH2wLoGcIC58saAZVIIfy5tbcw6hRANCAASOwZourmfHiZymPmBQrReRSRrNszwPw_M2MIOgkdkhSeqi4JqnZwyDUyMfpS_zeSdYyWTXVQJypo2wF0D8XKG3";
+const DEFAULT_SUBJECT = "mailto:www.itzlearningtime@gmail.com";
 
 export default {
   async scheduled(controller, env, ctx) {
-    webpush.setVapidDetails(
-      env.VAPID_SUBJECT || "mailto:www.itzlearningtime@gmail.com",
-      env.VAPID_PUBLIC_KEY,
-      env.VAPID_PRIVATE_KEY
-    );
-
     const now = new Date();
     const hour = now.getHours();
     const minute = now.getMinutes();
@@ -43,20 +45,47 @@ async function processRecord(env, key, hour, minute) {
     if (record.hour !== hour) return;
     if (Math.abs(record.minute - minute) > 7) return;
 
-    const payload = JSON.stringify({
-      title: "Time for Math Practice! ⚡",
-      body: "Keep your streak alive! Solve your daily mental math goals and sharpen your speed.",
-    });
-
-    try {
-      await webpush.sendNotification(record.subscription, payload, { TTL: 300 });
-    } catch (err) {
-      const statusCode = err && err.statusCode;
-      if (statusCode === 404 || statusCode === 410) {
-        await env.MATH_MASTER_KV.delete(key);
-      }
+    const ok = await sendPush(
+      env,
+      record.subscription,
+      "Time for Math Practice! ⚡",
+      "Keep your streak alive! Solve your daily mental math goals and sharpen your speed."
+    );
+    if (!ok && (ok.statusCode === 404 || ok.statusCode === 410)) {
+      await env.MATH_MASTER_KV.delete(key);
     }
   } catch (e) {
     // skip problematic records
   }
+}
+
+async function sendPush(env, subscription, title, body) {
+  const publicKey = (env && env.VAPID_PUBLIC_KEY) || DEFAULT_PUBLIC;
+  const privateKey = (env && env.VAPID_PRIVATE_KEY) || DEFAULT_PRIVATE;
+  const subject = (env && env.VAPID_SUBJECT) || DEFAULT_SUBJECT;
+
+  const appKeys = await ApplicationServerKeys.fromJSON({
+    publicKey,
+    privateKey,
+  });
+
+  const { headers, body: encryptedBody, endpoint } = await generatePushHTTPRequest({
+    payload: JSON.stringify({ title, body }),
+    applicationServerKeys: appKeys,
+    target: {
+      endpoint: subscription.endpoint,
+      keys: {
+        p256dh: subscription.keys.p256dh,
+        auth: subscription.keys.auth,
+      },
+    },
+    adminContact: subject,
+    ttl: 300,
+  });
+
+  const resp = await fetch(endpoint, { method: "POST", headers, body: encryptedBody });
+  if (!resp.ok) {
+    return { ok: false, statusCode: resp.status, error: await resp.text() };
+  }
+  return { ok: true };
 }
