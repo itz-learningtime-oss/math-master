@@ -67,7 +67,20 @@ Click **Save and Deploy**. Every push to `main` auto-deploys.
    - `VAPID_PUBLIC_KEY` = `BI7Bmi6uZ8eJnKY-YFCtF5FJGs2zPA_D8zYwg6CR2SFJ6qLgmqdnDINTIx-lL_N5J1jJZNdVAnKmjbAXQPxcobc`
    - `VAPID_PRIVATE_KEY` (optional) = `MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgbBGim8F-uKOA4bPgEH2wLoGcIC58saAZVIIfy5tbcw6hRANCAASOwZourmfHiZymPmBQrReRSRrNszwPw_M2MIOgkdkhSeqi4JqnZwyDUyMfpS_zeSdYyWTXVQJypo2wF0D8XKG3`
    > ⚠️ The client subscribes with the public key above (hardcoded in the app). The `VAPID_PRIVATE_KEY` is its **PKCS8-encoded** match. If you leave the env var unset or delete it, the built-in default works fine. If you previously set the OLD raw key, **delete it** — the code will fall back to the correct key automatically.
-5. **Reminder cron Worker**: Dashboard → Create → Worker → paste `worker/src/index.js`, cron `*/15 * * * *`, bind the same KV + VAPID vars.
+5. **Reminder cron Worker (REQUIRED for automatic daily reminders)** — this is a **separate** Cloudflare Worker, not part of the Pages deploy:
+   - Dashboard → **Workers & Pages** → **Create** → **Worker** → name it e.g. `math-master-reminder`
+   - Delete the default code, paste the contents of `webapp/worker/src/index.js`
+   - **Settings → Triggers → Cron Triggers** → add `*/15 * * * *`
+   - **Settings → Variables & Secrets**:
+     - Binding `MATH_MASTER_KV` → your KV namespace
+     - `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY` (or leave unset; built-in defaults work)
+   - **Deploy**
+   > ⚠️ The reminder only fires if BOTH (a) this Worker is deployed with the cron trigger, and (b) your subscription is saved to KV. The notification may arrive up to ~15 minutes after the set time (because the cron runs every 15 minutes).
+
+### Troubleshooting the daily reminder
+- **Test notification works but the reminder never fires** → the cron Worker above isn't deployed, or the subscription isn't in KV.
+- **"Could not save the schedule to the server"** when toggling the switch → the `MATH_MASTER_KV` binding is missing in the Pages project. Add it: *Settings → Functions → KV namespace bindings*, then **Retry deployment**.
+- To confirm your subscription is saved: toggle the reminder switch ON and wait for "Notifications enabled! Daily reminder scheduled…". Then check the KV namespace in the dashboard (Workers & Pages → KV → MATH_MASTER_KV) — you should see a `sub:` key.
 
 ---
 

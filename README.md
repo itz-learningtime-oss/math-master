@@ -59,11 +59,13 @@ Click **Save and Deploy**. Every push to `main` now auto-deploys.
   - `VAPID_PRIVATE_KEY` (optional) = `MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgbBGim8F-uKOA4bPgEH2wLoGcIC58saAZVIIfy5tbcw6hRANCAASOwZourmfHiZymPmBQrReRSRrNszwPw_M2MIOgkdkhSeqi4JqnZwyDUyMfpS_zeSdYyWTXVQJypo2wF0D8XKG3`
   > ⚠️ `VAPID_PRIVATE_KEY` must be **PKCS8-encoded** (the push backend now uses WebCrypto via `webpush-webcrypto`). If you previously set the OLD raw key, **delete it** — the code falls back to the correct built-in key automatically.
 
-**d. Deploy the reminder cron Worker** (for automatic daily reminders)
-- Dashboard → **Workers & Pages** → **Create** → **Worker** → paste the contents of `webapp/worker/src/index.js`
-- Set **Cron Triggers** → `*/15 * * * *`
-- Bind the same `MATH_MASTER_KV` KV namespace (Variable name: `MATH_MASTER_KV`)
-- Add `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY` environment variables.
+**d. Deploy the reminder cron Worker** (REQUIRED for automatic daily reminders — this is a **separate** Worker, not part of the Pages deploy)
+- Dashboard → **Workers & Pages** → **Create** → **Worker** → name it e.g. `math-master-reminder`
+- Delete default code, paste the contents of `webapp/worker/src/index.js`
+- **Settings → Triggers → Cron Triggers** → `*/15 * * * *`
+- **Settings → Variables & Secrets**: bind `MATH_MASTER_KV` → your KV namespace; add `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` (or leave unset — built-in defaults work)
+- **Deploy**
+> ⚠️ Reminder fires only if (a) this cron Worker is deployed and (b) the subscription is saved in KV. It may arrive up to ~15 min after the set time (cron runs every 15 min). If the reminder never fires but the test notification works, this Worker is the missing piece.
 
 Done — the site auto-deploys on every `git push`, and daily reminders fire from the cron Worker.
 

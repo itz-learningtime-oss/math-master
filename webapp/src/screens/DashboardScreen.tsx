@@ -101,9 +101,10 @@ export default function DashboardScreen() {
     if (checked) {
       const ok = await ensurePushSubscribed(reminderHour, reminderMinute);
       if (ok) {
-        setNotifStatus("Notifications enabled ✅");
+        setNotifStatus("Notifications enabled! Daily reminder scheduled at the set time. ✅");
       } else {
-        setNotifStatus(Notification.permission === "denied" ? "Notification permission denied in your browser." : "Could not enable notifications in this browser.");
+        const msg = Notification.permission === "denied" ? "Notification permission denied." : "Could not save the schedule to the server. Make sure the MATH_MASTER_KV binding is configured in the Pages dashboard (Settings → Functions → KV namespace bindings), then try again.";
+        setNotifStatus(msg);
         setIsEnabled(false);
       }
     } else {
@@ -306,19 +307,25 @@ export default function DashboardScreen() {
           <div className="bg-white rounded-3xl p-5 w-full max-w-sm animate-fade-in" onClick={(e) => e.stopPropagation()}>
             <h2 className="text-lg font-black text-slate-900">Set Reminder Time</h2>
             <p className="text-[13px] text-slate-600 mt-1">Select daily notification time:</p>
-            <div className="flex items-center justify-center gap-2 my-4">
-              <button onClick={() => setTempHour((tempHour + 1) % 24)} className="bg-slate-100 text-slate-900 text-3xl font-black rounded-xl px-6 py-3 hover:bg-slate-200">
-                {String(tempHour).padStart(2, "0")}
-              </button>
+            <div className="flex items-center justify-center gap-3 my-4">
+              {/* Hour */}
+              <div className="flex flex-col items-center gap-1">
+                <button onClick={() => setTempHour((tempHour + 1) % 24)} className="w-14 h-8 bg-slate-100 rounded-xl text-sm font-bold hover:bg-slate-200">▲</button>
+                <span className="text-3xl font-black text-slate-900 w-14 text-center">{String(tempHour).padStart(2, "0")}</span>
+                <button onClick={() => setTempHour((tempHour + 23) % 24)} className="w-14 h-8 bg-slate-100 rounded-xl text-sm font-bold hover:bg-slate-200">▼</button>
+              </div>
               <span className="text-3xl font-black text-slate-900">:</span>
-              <button onClick={() => setTempMin((tempMin + 15) % 60)} className="bg-slate-100 text-slate-900 text-3xl font-black rounded-xl px-6 py-3 hover:bg-slate-200">
-                {String(tempMin).padStart(2, "0")}
-              </button>
+              {/* Minute */}
+              <div className="flex flex-col items-center gap-1">
+                <button onClick={() => setTempMin((tempMin + 1) % 60)} className="w-14 h-8 bg-slate-100 rounded-xl text-sm font-bold hover:bg-slate-200">▲</button>
+                <span className="text-3xl font-black text-slate-900 w-14 text-center">{String(tempMin).padStart(2, "0")}</span>
+                <button onClick={() => setTempMin((tempMin + 59) % 60)} className="w-14 h-8 bg-slate-100 rounded-xl text-sm font-bold hover:bg-slate-200">▼</button>
+              </div>
             </div>
             <div className="flex justify-end gap-2">
               <button onClick={() => setShowTimeDialog(false)} className="px-4 py-2 text-slate-500 font-semibold text-sm">Cancel</button>
               <button
-                onClick={() => { saveDailyGoal(targetQuestions, tempHour, tempMin, isEnabled); updatePushSchedule(tempHour, tempMin, isEnabled); setShowTimeDialog(false); }}
+                onClick={() => { saveDailyGoal(targetQuestions, tempHour, tempMin, isEnabled); updatePushSchedule(tempHour, tempMin, isEnabled).then((ok) => { if (!ok) setNotifStatus("Subscribed, but the daily schedule couldn't be saved to the server. Add the MATH_MASTER_KV binding in the Pages dashboard, then retry."); }); setShowTimeDialog(false); }}
                 className="bg-primary-indigo text-white font-bold rounded-xl px-5 py-2 text-sm"
               >
                 Save

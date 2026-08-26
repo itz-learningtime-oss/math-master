@@ -123,8 +123,8 @@ export async function ensurePushSubscribed(hour: number, minute: number): Promis
   }
   const sub = await subscribeToPush();
   if (!sub) return false;
-  await saveSubscriptionToBackend(sub, hour, minute, true);
-  return true;
+  const saved = await saveSubscriptionToBackend(sub, hour, minute, true);
+  return saved; // only report success if the schedule was stored server-side too
 }
 
 export async function unsubscribeFromPush(): Promise<boolean> {
@@ -140,15 +140,16 @@ export async function unsubscribeFromPush(): Promise<boolean> {
   }
 }
 
-export async function updatePushSchedule(hour: number, minute: number, enabled: boolean): Promise<void> {
-  if (!isPushSupported()) return;
+export async function updatePushSchedule(hour: number, minute: number, enabled: boolean): Promise<boolean> {
+  if (!isPushSupported()) return false;
   if (enabled && Notification.permission === "granted") {
     const sub = await getSubscription();
-    if (sub) await saveSubscriptionToBackend(sub, hour, minute, true);
+    if (sub) return await saveSubscriptionToBackend(sub, hour, minute, true);
   } else {
     const sub = await getSubscription();
-    if (sub) await saveSubscriptionToBackend(sub, hour, minute, false);
+    if (sub) return await saveSubscriptionToBackend(sub, hour, minute, false);
   }
+  return false;
 }
 
 export function showLocalNotification(title: string, body: string): void {
