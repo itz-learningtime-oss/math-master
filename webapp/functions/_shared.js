@@ -73,10 +73,22 @@ export async function listSubscriptions(env) {
 export async function sendPush(env, subscription, title, body) {
   try {
     const v = getVapid(env);
-    const appKeys = await ApplicationServerKeys.fromJSON({
-      publicKey: v.publicKey,
-      privateKey: v.privateKey,
-    });
+    // Try the provided private key; if it's invalid (e.g. old raw format),
+    // fall back to the built-in default PKCS8 key.
+    let appKeys;
+    try {
+      appKeys = await ApplicationServerKeys.fromJSON({
+        publicKey: v.publicKey,
+        privateKey: v.privateKey,
+      });
+    } catch {
+      // Fall back to the default (always valid PKCS8)
+      const def = getVapid(undefined);
+      appKeys = await ApplicationServerKeys.fromJSON({
+        publicKey: def.publicKey,
+        privateKey: def.privateKey,
+      });
+    }
 
     const { headers, body: encryptedBody, endpoint } = await generatePushHTTPRequest({
       payload: JSON.stringify({ title, body }),

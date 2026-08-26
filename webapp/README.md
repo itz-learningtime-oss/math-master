@@ -65,8 +65,8 @@ Click **Save and Deploy**. Every push to `main` auto-deploys.
 3. **Compatibility flag (RECOMMENDED)**: *Settings → Functions → Compatibility flags* → add `nodejs_compat` (helps bundling; the push code itself uses WebCrypto so it works with or without it). After changing it, **Retry deployment** (Settings changes don't auto-redeploy).
 4. **Environment variables**:
    - `VAPID_PUBLIC_KEY` = `BI7Bmi6uZ8eJnKY-YFCtF5FJGs2zPA_D8zYwg6CR2SFJ6qLgmqdnDINTIx-lL_N5J1jJZNdVAnKmjbAXQPxcobc`
-   - `VAPID_PRIVATE_KEY` = `MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgbBGim8F-uKOA4bPgEH2wLoGcIC58saAZVIIfy5tbcw6hRANCAASOwZourmfHiZymPmBQrReRSRrNszwPw_M2MIOgkdkhSeqi4JqnZwyDUyMfpS_zeSdYyWTXVQJypo2wF0D8XKG3`
-   > ⚠️ The client subscribes with the public key above (hardcoded in the app). The `VAPID_PRIVATE_KEY` is its **PKCS8-encoded** match (new format required by the WebCrypto push library). If you leave the env var unset, the built-in default is used.
+   - `VAPID_PRIVATE_KEY` (optional) = `MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgbBGim8F-uKOA4bPgEH2wLoGcIC58saAZVIIfy5tbcw6hRANCAASOwZourmfHiZymPmBQrReRSRrNszwPw_M2MIOgkdkhSeqi4JqnZwyDUyMfpS_zeSdYyWTXVQJypo2wF0D8XKG3`
+   > ⚠️ The client subscribes with the public key above (hardcoded in the app). The `VAPID_PRIVATE_KEY` is its **PKCS8-encoded** match. If you leave the env var unset or delete it, the built-in default works fine. If you previously set the OLD raw key, **delete it** — the code will fall back to the correct key automatically.
 5. **Reminder cron Worker**: Dashboard → Create → Worker → paste `worker/src/index.js`, cron `*/15 * * * *`, bind the same KV + VAPID vars.
 
 ---

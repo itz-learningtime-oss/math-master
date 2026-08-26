@@ -64,10 +64,13 @@ async function sendPush(env, subscription, title, body) {
   const privateKey = (env && env.VAPID_PRIVATE_KEY) || DEFAULT_PRIVATE;
   const subject = (env && env.VAPID_SUBJECT) || DEFAULT_SUBJECT;
 
-  const appKeys = await ApplicationServerKeys.fromJSON({
-    publicKey,
-    privateKey,
-  });
+  let appKeys;
+  try {
+    appKeys = await ApplicationServerKeys.fromJSON({ publicKey, privateKey });
+  } catch {
+    // Fall back to the built-in default (always valid PKCS8)
+    appKeys = await ApplicationServerKeys.fromJSON({ publicKey: DEFAULT_PUBLIC, privateKey: DEFAULT_PRIVATE });
+  }
 
   const { headers, body: encryptedBody, endpoint } = await generatePushHTTPRequest({
     payload: JSON.stringify({ title, body }),
