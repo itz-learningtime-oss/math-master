@@ -199,3 +199,32 @@ export function showLocalNotification(title: string, body: string): void {
     // fallback
   }
 }
+
+// Schedule a LOCAL notification at the exact set time (works while the page is
+// open / in a background tab). Complements the server-side push, which covers
+// when the site is closed. Returns the timeout id (clear it to cancel).
+export function scheduleLocalReminder(hour: number, minute: number): number {
+  const now = new Date();
+  const target = new Date(now);
+  target.setHours(hour, minute, 0, 0);
+  if (target.getTime() <= now.getTime()) {
+    target.setDate(target.getDate() + 1); // next day if already passed
+  }
+  const delay = target.getTime() - now.getTime();
+
+  return window.setTimeout(async () => {
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      await reg.showNotification("Time for Math Practice! ⚡", {
+        body: "Keep your streak alive! Solve your daily mental math goals and sharpen your speed.",
+        icon: "/manifest-icon-512.png",
+        tag: "math-master-daily-reminder",
+      });
+    } catch {
+      showLocalNotification(
+        "Time for Math Practice! ⚡",
+        "Keep your streak alive! Solve your daily mental math goals and sharpen your speed."
+      );
+    }
+  }, delay);
+}

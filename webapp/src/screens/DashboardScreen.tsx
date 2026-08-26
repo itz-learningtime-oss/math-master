@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useApp } from "../store";
 import { PRACTICE_MODES } from "../types";
 import { daysSinceEpoch } from "../storage";
 import ShareAppDialog from "../components/ShareAppDialog";
-import { getOrCreateSubscription, saveSubscriptionToBackend, ensurePushSubscribed, sendTestPush, updatePushSchedule, isPushSupported } from "../workers/push";
+import { getOrCreateSubscription, saveSubscriptionToBackend, ensurePushSubscribed, sendTestPush, updatePushSchedule, scheduleLocalReminder, isPushSupported } from "../workers/push";
 
 export default function DashboardScreen() {
   const { state, dispatch, navigate, saveDailyGoal } = useApp();
@@ -13,6 +13,16 @@ export default function DashboardScreen() {
   const [tempHour, setTempHour] = useState(state.goal?.reminderHour ?? 19);
   const [tempMin, setTempMin] = useState(state.goal?.reminderMinute ?? 0);
   const [notifStatus, setNotifStatus] = useState<string>("");
+  const localTimerRef = useRef<number | null>(null);
+
+  const clearLocalTimer = () => {
+    if (localTimerRef.current !== null) {
+      window.clearTimeout(localTimerRef.current);
+      localTimerRef.current = null;
+    }
+  };
+
+  useEffect(() => clearLocalTimer, []);
 
   const sessions = state.sessions;
   const goal = state.goal;
@@ -106,6 +116,10 @@ export default function DashboardScreen() {
     setIsEnabled(checked);
     saveDailyGoal(targetQuestions, reminderHour, reminderMinute, checked);
     if (checked) {
+      // Also schedule a local notification so it fires at the exact time
+      // while the page is open (independent of the server-side cron).
+      clearLocalTimer();
+      localTimerRef.current = scheduleLocalReminder(reminderHour, reminderMinute);
       const subResult = await ensurePushSubscribed(reminderHour, reminderMinute);
       if (subResult.ok) {
         setNotifStatus("Notifications enabled! Daily reminder scheduled at the set time. ✅");
@@ -114,6 +128,7 @@ export default function DashboardScreen() {
         setIsEnabled(false);
       }
     } else {
+      clearLocalTimer();
       const res = await updatePushSchedule(reminderHour, reminderMinute, false);
       if (!res.ok) setNotifStatus(`Could not update the schedule: ${res.error}`);
     }
@@ -332,7 +347,15 @@ export default function DashboardScreen() {
             <div className="flex justify-end gap-2">
               <button onClick={() => setShowTimeDialog(false)} className="px-4 py-2 text-slate-500 font-semibold text-sm">Cancel</button>
               <button
-                onClick={() => { saveDailyGoal(targetQuestions, tempHour, tempMin, isEnabled); updatePushSchedule(tempHour, tempMin, isEnabled).then((res) => { if (!res.ok) setNotifStatus(`Schedule not saved: ${res.error || "server error"}. Add the MATH_MASTER_KV binding in the Pages dashboard, then Retry deployment.`); }); setShowTimeDialog(false); }}
+                onClick={() => {
+                  saveDailyGoal(targetQuestions, tempHour, tempMin, isEnabled);
+                  if (isEnabled) {
+                    clearLocalTimer();
+                    localTimerRef.current = scheduleLocalReminder(tempHour, tempMin);
+                  }
+                  updatePushSchedule(tempHour, tempMin, isEnabled).then((res) => { if (!res.ok) setNotifStatus(`Schedule not saved: ${res.error || "server error"}. Add the MATH_MASTER_KV binding in the Pages dashboard, then Retry deployment.`); });
+                  setShowTimeDialog(false);
+                }}
                 className="bg-primary-indigo text-white font-bold rounded-xl px-5 py-2 text-sm"
               >
                 Save

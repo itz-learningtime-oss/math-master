@@ -142,7 +142,7 @@ async function processRecord(env, key, hour, minute) {
     const reminderMod = record.hour * 60 + record.minute;
     let diff = currentMod - reminderMod;
     if (diff < 0) diff += 1440; // not reached yet today
-    if (diff > 5) return "skip"; // 5-minute window (external ping every 5 min)
+    if (diff > 60) return "skip"; // 60-minute window to tolerate GitHub Actions delays
 
     // Prevent duplicate sends within the same day.
     const today = new Date().toISOString().slice(0, 10);
