@@ -42,16 +42,22 @@ async function processRecord(env, key, hour, minute) {
     const record = JSON.parse(raw);
 
     if (!record.enabled) return;
-    if (record.hour !== hour) return;
-    if (Math.abs(record.minute - minute) > 7) return;
 
-    const ok = await sendPush(
+    // Use minute-of-day with circular distance to handle the cross-hour
+    // boundary (e.g. reminder 1:58, cron runs at 2:00).
+    const currentMod = hour * 60 + minute;
+    const reminderMod = record.hour * 60 + record.minute;
+    let diff = Math.abs(currentMod - reminderMod);
+    if (diff > 720) diff = 1440 - diff; // wrap around midnight
+    if (diff > 7) return;
+
+    const result = await sendPush(
       env,
       record.subscription,
       "Time for Math Practice! ⚡",
       "Keep your streak alive! Solve your daily mental math goals and sharpen your speed."
     );
-    if (!ok && (ok.statusCode === 404 || ok.statusCode === 410)) {
+    if (!result.ok && (result.statusCode === 404 || result.statusCode === 410)) {
       await env.MATH_MASTER_KV.delete(key);
     }
   } catch (e) {

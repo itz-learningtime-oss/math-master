@@ -75,10 +75,11 @@ Click **Save and Deploy**. Every push to `main` auto-deploys.
      - Binding `MATH_MASTER_KV` → your KV namespace
      - `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY` (or leave unset; built-in defaults work)
    - **Deploy**
-   > ⚠️ The reminder only fires if BOTH (a) this Worker is deployed with the cron trigger, and (b) your subscription is saved to KV. The notification may arrive up to ~15 minutes after the set time (because the cron runs every 15 minutes).
+   > ⚠️ The reminder only fires if BOTH (a) this Worker is deployed with the cron trigger, and (b) your subscription is saved to KV. The notification fires at the nearest cron run to your set time (every 15 min, so within ~7 minutes).
 
 ### Troubleshooting the daily reminder
-- **Test notification works but the reminder never fires** → the cron Worker above isn't deployed, or the subscription isn't in KV.
+- **Test notification works but the reminder never fires** → the **cron Worker is not deployed**. It is a separate Worker — go to Workers & Pages → Create → Worker, paste `webapp/worker/src/index.js`, add the cron trigger `*/15 * * * *` and the `MATH_MASTER_KV` binding, then Deploy. Without it, nothing triggers the daily push.
+- **Reminder set for :53–:59 of an hour never fired** → fixed — the Worker now matches across the hour boundary (minute-of-day logic), so 1:58 fires at the 2:00 cron run.
 - **"Could not save the schedule to the server"** when toggling the switch → the `MATH_MASTER_KV` binding is missing in the Pages project. Add it: *Settings → Functions → KV namespace bindings*, then **Retry deployment**.
 - To confirm your subscription is saved: toggle the reminder switch ON and wait for "Notifications enabled! Daily reminder scheduled…". Then check the KV namespace in the dashboard (Workers & Pages → KV → MATH_MASTER_KV) — you should see a `sub:` key.
 
