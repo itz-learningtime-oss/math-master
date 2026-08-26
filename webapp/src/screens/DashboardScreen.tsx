@@ -3,7 +3,7 @@ import { useApp } from "../store";
 import { PRACTICE_MODES } from "../types";
 import { daysSinceEpoch } from "../storage";
 import ShareAppDialog from "../components/ShareAppDialog";
-import { ensurePushSubscribed, sendTestPush, updatePushSchedule, isPushSupported } from "../workers/push";
+import { getOrCreateSubscription, saveSubscriptionToBackend, ensurePushSubscribed, sendTestPush, updatePushSchedule, isPushSupported } from "../workers/push";
 
 export default function DashboardScreen() {
   const { state, dispatch, navigate, saveDailyGoal } = useApp();
@@ -66,9 +66,9 @@ export default function DashboardScreen() {
       return;
     }
     try {
-      // Automatically subscribe if needed (no need to toggle the switch first).
-      const subscribed = await ensurePushSubscribed(reminderHour, reminderMinute);
-      if (!subscribed) {
+      // Create (or reuse) the browser subscription — no server call needed yet.
+      const sub = await getOrCreateSubscription();
+      if (!sub) {
         const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
         setNotifStatus(
           isIOS
@@ -80,7 +80,14 @@ export default function DashboardScreen() {
       setIsEnabled(true);
       const result = await sendTestPush();
       if (result.ok) {
-        setNotifStatus("Test notification sent! Check your notification shade. ✅");
+        // Test delivered. Also try to persist the schedule so the daily
+        // reminder works; report if KV isn't configured yet.
+        const saved = await saveSubscriptionToBackend(sub, reminderHour, reminderMinute, true);
+        setNotifStatus(
+          saved.ok
+            ? "Test notification sent! Daily reminder scheduled at the set time. ✅"
+            : `Test notification sent! ✅ (Reminder schedule needs fixing: ${saved.error})`
+        );
       } else {
         // Show the actual server error so the user can fix the root cause.
         const hint = /crypto|ECDH|encrypt|not defined|web-push|webpush/i.test(result.error || "")
@@ -99,16 +106,16 @@ export default function DashboardScreen() {
     setIsEnabled(checked);
     saveDailyGoal(targetQuestions, reminderHour, reminderMinute, checked);
     if (checked) {
-      const ok = await ensurePushSubscribed(reminderHour, reminderMinute);
-      if (ok) {
+      const subResult = await ensurePushSubscribed(reminderHour, reminderMinute);
+      if (subResult.ok) {
         setNotifStatus("Notifications enabled! Daily reminder scheduled at the set time. ✅");
       } else {
-        const msg = Notification.permission === "denied" ? "Notification permission denied." : "Could not save the schedule to the server. Make sure the MATH_MASTER_KV binding is configured in the Pages dashboard (Settings → Functions → KV namespace bindings), then try again.";
-        setNotifStatus(msg);
+        setNotifStatus(subResult.error || "Could not enable notifications.");
         setIsEnabled(false);
       }
     } else {
-      await updatePushSchedule(reminderHour, reminderMinute, false);
+      const res = await updatePushSchedule(reminderHour, reminderMinute, false);
+      if (!res.ok) setNotifStatus(`Could not update the schedule: ${res.error}`);
     }
   };
 
@@ -325,7 +332,7 @@ export default function DashboardScreen() {
             <div className="flex justify-end gap-2">
               <button onClick={() => setShowTimeDialog(false)} className="px-4 py-2 text-slate-500 font-semibold text-sm">Cancel</button>
               <button
-                onClick={() => { saveDailyGoal(targetQuestions, tempHour, tempMin, isEnabled); updatePushSchedule(tempHour, tempMin, isEnabled).then((ok) => { if (!ok) setNotifStatus("Subscribed, but the daily schedule couldn't be saved to the server. Add the MATH_MASTER_KV binding in the Pages dashboard, then retry."); }); setShowTimeDialog(false); }}
+                onClick={() => { saveDailyGoal(targetQuestions, tempHour, tempMin, isEnabled); updatePushSchedule(tempHour, tempMin, isEnabled).then((res) => { if (!res.ok) setNotifStatus(`Schedule not saved: ${res.error || "server error"}. Add the MATH_MASTER_KV binding in the Pages dashboard, then Retry deployment.`); }); setShowTimeDialog(false); }}
                 className="bg-primary-indigo text-white font-bold rounded-xl px-5 py-2 text-sm"
               >
                 Save

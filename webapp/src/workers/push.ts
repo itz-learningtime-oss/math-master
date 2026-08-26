@@ -77,16 +77,31 @@ export async function getSubscription(): Promise<PushSubscription | null> {
   }
 }
 
-export async function saveSubscriptionToBackend(sub: PushSubscription, hour: number, minute: number, enabled: boolean): Promise<boolean> {
+export async function saveSubscriptionToBackend(
+  sub: PushSubscription,
+  hour: number,
+  minute: number,
+  enabled: boolean
+): Promise<{ ok: boolean; error?: string }> {
   try {
     const resp = await fetch("/api/subscribe", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ subscription: sub, hour, minute, enabled }),
     });
-    return resp.ok;
-  } catch {
-    return false;
+    if (!resp.ok) {
+      let msg = `Server responded with ${resp.status}`;
+      try {
+        const body = await resp.json();
+        if (body && body.error) msg = body.error;
+      } catch {
+        // ignore parse failure
+      }
+      return { ok: false, error: msg };
+    }
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: String(e) };
   }
 }
 
@@ -115,16 +130,32 @@ export async function sendTestPush(): Promise<{ ok: boolean; error?: string }> {
   }
 }
 
-export async function ensurePushSubscribed(hour: number, minute: number): Promise<boolean> {
-  if (!isPushSupported()) return false;
+// Just create (or reuse) the browser push subscription — no backend call.
+export async function getOrCreateSubscription(): Promise<PushSubscription | null> {
+  if (!isPushSupported()) return null;
   if (Notification.permission !== "granted") {
     const ok = await requestPermission();
-    if (!ok) return false;
+    if (!ok) return null;
   }
-  const sub = await subscribeToPush();
-  if (!sub) return false;
+  return subscribeToPush();
+}
+
+export async function ensurePushSubscribed(
+  hour: number,
+  minute: number
+): Promise<{ ok: boolean; error?: string }> {
+  const sub = await getOrCreateSubscription();
+  if (!sub) {
+    return { ok: false, error: "Notification permission denied or push not supported in this browser." };
+  }
   const saved = await saveSubscriptionToBackend(sub, hour, minute, true);
-  return saved; // only report success if the schedule was stored server-side too
+  if (!saved.ok) {
+    return {
+      ok: false,
+      error: `Subscribed in the browser, but the schedule couldn't be saved to the server: ${saved.error}`,
+    };
+  }
+  return { ok: true };
 }
 
 export async function unsubscribeFromPush(): Promise<boolean> {
@@ -140,16 +171,15 @@ export async function unsubscribeFromPush(): Promise<boolean> {
   }
 }
 
-export async function updatePushSchedule(hour: number, minute: number, enabled: boolean): Promise<boolean> {
-  if (!isPushSupported()) return false;
-  if (enabled && Notification.permission === "granted") {
-    const sub = await getSubscription();
-    if (sub) return await saveSubscriptionToBackend(sub, hour, minute, true);
-  } else {
-    const sub = await getSubscription();
-    if (sub) return await saveSubscriptionToBackend(sub, hour, minute, false);
-  }
-  return false;
+export async function updatePushSchedule(
+  hour: number,
+  minute: number,
+  enabled: boolean
+): Promise<{ ok: boolean; error?: string }> {
+  if (!isPushSupported()) return { ok: false, error: "Push not supported in this browser." };
+  const sub = await getSubscription();
+  if (!sub) return { ok: false, error: "No push subscription found. Enable notifications first." };
+  return await saveSubscriptionToBackend(sub, hour, minute, enabled);
 }
 
 export function showLocalNotification(title: string, body: string): void {
