@@ -218,7 +218,7 @@ export default function DashboardScreen() {
       <p className="text-[11px] font-black text-slate-500 tracking-widest pl-1">PERFORMANCE BY MODE</p>
       {PRACTICE_MODES.map((m) => {
         const modeItems = grouped[m.id] ?? [];
-        const best = modeItems.length > 0 ? Math.min(...modeItems.map((s) => s.totalTimeSec)) : null;
+        const best = modeItems.length > 0 ? Math.min(...modeItems.map((s) => s.totalTimeSec / Math.max(s.totalQuestions, 1))) : null;
         return (
           <button
             key={m.id}

@@ -761,6 +761,80 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     window.addEventListener("popstate", handler);
     return () => window.removeEventListener("popstate", handler);
   }, [state.destination, goBack]);
+
+  // ---- Automatic physical keyboard input (desktop) ----
+  // Active only during Practice / Grid sessions so users can type answers
+  // directly instead of clicking the on-screen keypad.
+  const stateRef = useRef(state);
+  stateRef.current = state;
+  const submitAnswerRef = useRef(submitAnswer);
+  submitAnswerRef.current = submitAnswer;
+  const submitGridAnswerRef = useRef(submitGridAnswer);
+  submitGridAnswerRef.current = submitGridAnswer;
+
+  const destType = state.destination.type;
+  useEffect(() => {
+    if (destType !== "practice" && destType !== "grid") return;
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const el = document.activeElement as HTMLElement | null;
+      if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) return;
+      if (el && el.tagName === "BUTTON") el.blur();
+
+      const s = stateRef.current;
+      if (s.isPaused) return;
+
+      const mode = s.config.mode;
+      const q = s.questions[s.currentQuestionIndex];
+      const isReverseTable = q?.type === "reverse-table";
+      const isFactors = mode === "factors" || q?.type === "factors";
+      const isComplex = mode === "complex";
+      const isSub = mode === "subtraction";
+      const isMul = mode === "multiplication" || isReverseTable || isFactors;
+      const current = s.currentInput;
+      const append = (str: string) => {
+        e.preventDefault();
+        dispatch({ type: "UPDATE_INPUT", input: current + str });
+      };
+
+      if (/^[0-9]$/.test(e.key)) {
+        append(e.key);
+        return;
+      }
+      if (e.key === "Backspace") {
+        e.preventDefault();
+        if (current.length > 0) dispatch({ type: "UPDATE_INPUT", input: current.slice(0, -1) });
+        return;
+      }
+      if (e.key === "Enter") {
+        e.preventDefault();
+        if (s.destination.type === "grid") submitGridAnswerRef.current(current);
+        else submitAnswerRef.current();
+        return;
+      }
+      if (e.key === "," || e.key === ";") {
+        if (isReverseTable || isFactors) append(", ");
+        return;
+      }
+      if (e.key === "-" && (isSub || isComplex)) {
+        append("-");
+        return;
+      }
+      if (e.key === "." && isComplex) {
+        append(".");
+        return;
+      }
+      if ((e.key === "*" || e.key === "x" || e.key === "X") && isMul) {
+        append("*");
+        return;
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [destType, dispatch]);
+
   const value = useMemo<AppContextValue>(
     () => ({
       state,

@@ -14,16 +14,16 @@ export default function PerformanceAnalysisScreen() {
     .filter((s) => s.mode === selectedMode)
     .sort((a, b) => a.timestamp - b.timestamp);
 
-  const lastTime =
-    selectedMode === dest.mode && dest.lastCompletionTime && dest.lastCompletionTime > 0
-      ? dest.lastCompletionTime
-      : modeSessions.length > 0
-        ? modeSessions[modeSessions.length - 1].totalTimeSec
-        : null;
+  // Average seconds per question (accounts for different session sizes)
+  const avgPerQ = (s: { totalTimeSec: number; totalQuestions: number }) =>
+    s.totalTimeSec / Math.max(s.totalQuestions, 1);
 
-  const bestTime = modeSessions.length > 0 ? Math.min(...modeSessions.map((s) => s.totalTimeSec)) : lastTime;
+  const lastSession = modeSessions.length > 0 ? modeSessions[modeSessions.length - 1] : null;
+  const lastTime = lastSession ? avgPerQ(lastSession) : null;
 
-  const chartData: [number, number][] = modeSessions.slice(-15).map((s) => [s.timestamp, s.totalTimeSec]);
+  const bestTime = modeSessions.length > 0 ? Math.min(...modeSessions.map(avgPerQ)) : lastTime;
+
+  const chartData: [number, number][] = modeSessions.slice(-15).map((s) => [s.timestamp, avgPerQ(s)]);
 
   return (
     <div className="min-h-screen bg-slate-50 px-4 py-3 max-w-lg mx-auto flex flex-col">
@@ -52,17 +52,17 @@ export default function PerformanceAnalysisScreen() {
         {/* Last vs Best */}
         <div className="flex gap-2.5 mt-4">
           <div className="flex-1 bg-blue-50 border border-blue-200 rounded-2xl py-4 text-center">
-            <p className="text-[10px] font-black text-blue-600 tracking-widest">LAST TIME</p>
+            <p className="text-[10px] font-black text-blue-600 tracking-widest">LAST TIME / Q</p>
             <p className="text-2xl font-black mono text-blue-600 mt-1">{lastTime != null ? `${lastTime.toFixed(2)}s` : "--"}</p>
           </div>
           <div className="flex-1 bg-rose-50 border border-rose-200 rounded-2xl py-4 text-center">
-            <p className="text-[10px] font-black text-rose-500 tracking-widest">PERSONAL BEST</p>
+            <p className="text-[10px] font-black text-rose-500 tracking-widest">BEST / Q</p>
             <p className="text-2xl font-black mono text-rose-500 mt-1">{bestTime != null ? `${bestTime.toFixed(2)}s` : "--"}</p>
           </div>
         </div>
 
         {/* Chart */}
-        <p className="text-[11px] font-black text-slate-500 tracking-widest mt-4 mb-2 pl-1">SPEED & TIMING PROGRESSION</p>
+        <p className="text-[11px] font-black text-slate-500 tracking-widest mt-4 mb-2 pl-1">SPEED & TIMING PROGRESSION (s / question)</p>
         <PerformanceChart times={chartData} />
       </div>
 

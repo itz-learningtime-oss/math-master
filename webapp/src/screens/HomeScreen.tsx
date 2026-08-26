@@ -14,7 +14,7 @@ export default function HomeScreen() {
     .reduce((sum, s) => sum + s.totalQuestions, 0);
 
   const gridSessions = state.sessions.filter((s) => s.mode === "grid");
-  const bestGridTime = gridSessions.length > 0 ? Math.min(...gridSessions.map((s) => s.totalTimeSec)) : null;
+  const bestGridTime = gridSessions.length > 0 ? Math.min(...gridSessions.map((s) => s.totalTimeSec / Math.max(s.totalQuestions, 1))) : null;
 
   const userName = state.goal?.userName ?? "";
   const dailyGoalTarget = state.goal?.dailyTargetQuestions ?? 20;
