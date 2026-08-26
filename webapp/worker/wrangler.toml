@@ -3,11 +3,10 @@ main = "src/index.js"
 compatibility_date = "2025-01-01"
 compatibility_flags = ["nodejs_compat"]
 
-# Cron: run every 15 minutes to catch each user's scheduled reminder time.
-# The Worker uses minute-of-day circular matching, so every reminder minute
-# (including :53-:59 which fall into the next hour) is caught.
+# Cron: run every 5 minutes so every reminder minute is caught within ~5 min.
+# The Worker uses minute-of-day circular matching with a 5-minute window.
 [triggers]
-crons = ["*/15 * * * *"]
+crons = ["*/5 * * * *"]
 
 # KV namespace shared with the Pages project.
 [[kv_namespaces]]

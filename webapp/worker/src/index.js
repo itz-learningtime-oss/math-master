@@ -67,7 +67,7 @@ async function processRecord(env, key, hour, minute) {
     const reminderMod = record.hour * 60 + record.minute;
     let diff = Math.abs(currentMod - reminderMod);
     if (diff > 720) diff = 1440 - diff; // wrap around midnight
-    if (diff > 7) return;
+    if (diff > 5) return; // matches 5-minute cron; fires within ~5 min
 
     const result = await sendPush(
       env,
