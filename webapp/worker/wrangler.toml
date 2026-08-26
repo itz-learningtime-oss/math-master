@@ -3,20 +3,18 @@ main = "src/index.js"
 compatibility_date = "2025-01-01"
 compatibility_flags = ["nodejs_compat"]
 
-# Cron: run every 15 minutes to catch each user's scheduled reminder time
+# Cron: run every 15 minutes to catch each user's scheduled reminder time.
+# The Worker uses minute-of-day circular matching, so every reminder minute
+# (including :53-:59 which fall into the next hour) is caught.
 [triggers]
 crons = ["*/15 * * * *"]
 
-# NOTE: This file is only used if you deploy the reminder Worker via the Wrangler CLI.
-# The recommended (CLI-free) way is to create the Worker in the Cloudflare dashboard,
-# paste src/index.js, set the cron trigger, and bind the KV namespace + VAPID vars there.
-#
-# If you DO use wrangler, create the KV namespace and set its real id below:
-#   npx wrangler kv namespace create MATH_MASTER_KV
+# KV namespace shared with the Pages project.
 [[kv_namespaces]]
 binding = "MATH_MASTER_KV"
-id = "YOUR_REAL_KV_NAMESPACE_ID"
+id = "6583824284db470cbcbfe03a5ac79a5c"
 
-# VAPID keys (set VAPID_PRIVATE_KEY as a secret, not in this file)
+# VAPID keys (VAPID_PRIVATE_KEY can be set as a secret; defaults also work in code)
 [vars]
 VAPID_SUBJECT = "mailto:www.itzlearningtime@gmail.com"
+VAPID_PUBLIC_KEY = "BI7Bmi6uZ8eJnKY-YFCtF5FJGs2zPA_D8zYwg6CR2SFJ6qLgmqdnDINTIx-lL_N5J1jJZNdVAnKmjbAXQPxcobc"
