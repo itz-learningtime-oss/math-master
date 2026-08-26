@@ -77,6 +77,13 @@ export async function getSubscription(): Promise<PushSubscription | null> {
   }
 }
 
+// Convert a local wall-clock hour/minute to UTC (the cron Worker runs in UTC).
+function localToUTC(hour: number, minute: number): { hour: number; minute: number } {
+  const offsetMin = new Date().getTimezoneOffset(); // UTC - local, in minutes
+  const utcMin = ((hour * 60 + minute + offsetMin) % 1440 + 1440) % 1440;
+  return { hour: Math.floor(utcMin / 60), minute: utcMin % 60 };
+}
+
 export async function saveSubscriptionToBackend(
   sub: PushSubscription,
   hour: number,
@@ -84,10 +91,12 @@ export async function saveSubscriptionToBackend(
   enabled: boolean
 ): Promise<{ ok: boolean; error?: string }> {
   try {
+    // Store UTC so the cron Worker (running in UTC) matches correctly.
+    const utc = localToUTC(hour, minute);
     const resp = await fetch("/api/subscribe", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ subscription: sub, hour, minute, enabled }),
+      body: JSON.stringify({ subscription: sub, hour: utc.hour, minute: utc.minute, enabled }),
     });
     if (!resp.ok) {
       let msg = `Server responded with ${resp.status}`;

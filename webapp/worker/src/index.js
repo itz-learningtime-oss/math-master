@@ -29,6 +29,24 @@ export default {
 
   // Optional: a simple health-check endpoint when invoked via HTTP
   async fetch(request, env) {
+    const url = new URL(request.url);
+    if (url.pathname === "/debug") {
+      const now = new Date();
+      const keys = await env.MATH_MASTER_KV.list({ prefix: "sub:" });
+      return new Response(
+        JSON.stringify(
+          {
+            nowUTC: now.toISOString(),
+            utcHour: now.getHours(),
+            utcMinute: now.getMinutes(),
+            subscriptionCount: keys.keys.length,
+          },
+          null,
+          2
+        ),
+        { headers: { "Content-Type": "application/json" } }
+      );
+    }
     return new Response("Math Master reminder scheduler is running.", {
       headers: { "Content-Type": "text/plain" },
     });
